@@ -98,7 +98,7 @@ class XlsxExporter {
   static header(signature, values) {
     const sizes = signature === 0x04034b50 ? [2, 2, 2, 2, 2, 4, 4, 4, 2, 2] : signature === 0x02014b50 ? [2, 2, 2, 2, 2, 2, 4, 4, 4, 2, 2, 2, 2, 2, 4, 4] : [2, 2, 2, 2, 4, 4, 2];
     const out = new Uint8Array(4 + values.reduce((n, _, i) => n + sizes[i], 0)); const view = new DataView(out.buffer); view.setUint32(0, signature, true);
-    let pos = 4; values.forEach((v, i) => { const size = sizes[i]; size === 2 ? view.setUint16(pos, v) : view.setUint32(pos, v >>> 0, true); pos += size; }); return out;
+    let pos = 4; values.forEach((v, i) => { const size = sizes[i]; size === 2 ? view.setUint16(pos, v, true) : view.setUint32(pos, v >>> 0, true); pos += size; }); return out;
   }
 
   static crc32(bytes) { let crc = -1; for (const b of bytes) { crc ^= b; for (let i = 0; i < 8; i++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1)); } return (crc ^ -1) >>> 0; }
