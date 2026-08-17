@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "1/2波片偏振分析与极坐标工作台",
   "short_name": "PLO Polar Studio",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "专业级光学偏振与半波片旋转测量数据极坐标可视化、马吕斯拟合、物理反演、8大多算法背景扣除、DoLP线偏振度解算与学术报告系统",
   "action": {
     "default_title": "点击直接打开 1/2波片偏振分析工作台 (全栏)",

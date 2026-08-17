@@ -31,15 +31,47 @@ class DataQuality {
     if (config.autoPhaseLock) issues.push({ severity: 'warn', text: '已启用自动相位锁定；该操作用于可视化对齐，不能替代机械零位校准或用于评估重复性。' });
     const sizes = (groups || []).map(g => g.points.length);
     if (sizes.some(s => s < 5)) issues.push({ severity: 'warn', text: `至少一组切片少于 5 点（组大小：${sizes.join('/')}）；组间均值与误差带不稳健。` });
+    const coherence = this.groupCoherence(groups);
+    if (coherence !== null && coherence < 0.4) {
+      issues.push({ severity: 'error', text: `三段周期曲线一致性极低（最小相关系数 ${coherence.toFixed(3)}）；不得将它们作为重复测量进行平均。请检查 x 列、数据行顺序和角度倍率。` });
+    } else if (coherence !== null && coherence < 0.9) {
+      issues.push({ severity: 'warn', text: `三段周期曲线一致性偏低（最小相关系数 ${coherence.toFixed(3)}）；平均曲线仅供排查，不能作为重复测量结论。` });
+    }
     if (fitResult && fitResult.params.rSquared < 0.9) issues.push({ severity: 'warn', text: `拟合 R²=${fitResult.params.rSquaredPercent}%；马吕斯模型与数据一致性有限，不应据此作强物理反演。` });
     if (!fitResult) issues.push({ severity: 'error', text: '拟合未完成；不输出基于拟合的物理参数。' });
     const claimLevel = issues.some(x => x.severity === 'error') ? 'blocked' : issues.some(x => x.severity === 'warn') ? 'qualified' : 'supported';
-    return { ...inputAudit, clampedPoints: clamped, groupSizes: sizes, claimLevel, issues };
+    return { ...inputAudit, clampedPoints: clamped, groupSizes: sizes, groupCoherence: coherence, claimLevel, issues };
+  }
+
+  static groupCoherence(groups) {
+    if (!Array.isArray(groups) || groups.length < 2) return null;
+    const usable = groups.filter(g => Array.isArray(g.points) && g.points.length >= 5);
+    if (usable.length < 2) return null;
+    const correlations = [];
+    for (let i = 0; i < usable.length; i++) {
+      for (let j = i + 1; j < usable.length; j++) {
+        const a = usable[i].points.map(p => p.y);
+        const b = usable[j].points.map(p => p.y);
+        const n = Math.min(a.length, b.length);
+        if (n < 5) continue;
+        const aa = a.slice(0, n), bb = b.slice(0, n);
+        const ma = aa.reduce((s, v) => s + v, 0) / n;
+        const mb = bb.reduce((s, v) => s + v, 0) / n;
+        let cov = 0, va = 0, vb = 0;
+        for (let k = 0; k < n; k++) {
+          const da = aa[k] - ma, db = bb[k] - mb;
+          cov += da * db; va += da * da; vb += db * db;
+        }
+        if (va > 1e-12 && vb > 1e-12) correlations.push(cov / Math.sqrt(va * vb));
+      }
+    }
+    return correlations.length ? Math.min(...correlations) : null;
   }
 
   static format(audit) {
     if (!audit) return '尚未执行质量审查。';
-    const head = `有效点 ${audit.pointCount}｜角度覆盖 ${audit.angleSpan}°｜重复 x ${audit.duplicateX}｜负值截断 ${audit.clampedPoints || 0}`;
+    const coherence = audit.groupCoherence === null || audit.groupCoherence === undefined ? '-' : audit.groupCoherence.toFixed(3);
+    const head = `有效点 ${audit.pointCount}｜角度覆盖 ${audit.angleSpan}°｜重复 x ${audit.duplicateX}｜周期一致性 ${coherence}｜负值截断 ${audit.clampedPoints || 0}`;
     if (!audit.issues.length) return `${head}。未发现自动规则异常；仍需结合实验校准与原始记录判断。`;
     return `${head}。${audit.issues.map(x => `${x.severity === 'error' ? '错误' : '提示'}：${x.text}`).join(' ')}`;
   }
