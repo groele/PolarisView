@@ -82,6 +82,17 @@ class PolarChartManager {
     return themes[this.journalTheme] || themes.nature;
   }
 
+  getDolpReferenceRings(summary, fitResult) {
+    const c = fitResult?.params?.coeffs;
+    const modulation = c ? Math.sqrt(c.A4 * c.A4 + c.B4 * c.B4) : null;
+    const min = c && modulation !== null ? Math.max(0, c.A0 - modulation) : summary.minIntensity;
+    const max = c && modulation !== null ? c.A0 + modulation : summary.maxIntensity;
+    return [
+      { value: Number(min.toFixed(2)), label: 'Imin' },
+      { value: Number(max.toFixed(2)), label: 'Imax' }
+    ].filter(item => Number.isFinite(item.value) && item.value >= 0);
+  }
+
   resize() {
     if (this.resizeRafId) cancelAnimationFrame(this.resizeRafId);
     this.resizeRafId = requestAnimationFrame(() => {
@@ -178,6 +189,13 @@ class PolarChartManager {
 
     const polarSeries = [];
     const legendData = [];
+    this.getDolpReferenceRings(summary, fitResult).forEach(ref => {
+      polarSeries.push({
+        name: `DoLP ${ref.label} reference`, type: 'line', coordinateSystem: 'polar',
+        showSymbol: false, silent: true, data: Array.from({ length: 37 }, (_, i) => [ref.value, i * 10]),
+        lineStyle: { color: '#94a3b8', width: 1, type: 'dashed', opacity: 0.5 }, z: 0
+      });
+    });
 
     // 误差阴影带
     if (this.errorType !== 'none' && (this.displayMode === 'all' || this.displayMode === 'mean_error')) {
@@ -314,7 +332,7 @@ class PolarChartManager {
     const polarOption = {
       title: {
         text: '1/2波片偏振极坐标空间分布图 (Polar Intensity Distribution)',
-        subtext: `DoLP线偏度: ${dolpDisplay}% | 消光比: ${summary.extinctionRatio} (${summary.extinctionRatioDB} dB) | 调制度: ${summary.modulationPercent}% | 主轴偏角 θ₀: ${fitResult ? fitResult.params.theta0 : '-'}° | 拟合 R²: ${fitResult ? fitResult.params.rSquaredPercent : '-'}%`,
+        subtext: `DoLP: ${dolpDisplay}% | Imin/Imax 浅灰虚线参考环 | 消光比: ${summary.extinctionRatio} (${summary.extinctionRatioDB} dB) | 调制度: ${summary.modulationPercent}% | 主轴偏角 θ₀: ${fitResult ? fitResult.params.theta0 : '-'}° | 拟合 R²: ${fitResult ? fitResult.params.rSquaredPercent : '-'}%`,
         left: 'center',
         top: 6,
         textStyle: { fontSize: 13, fontWeight: '700' },
@@ -566,6 +584,14 @@ class PolarChartManager {
     const gColors = [palette.g1, palette.g2, palette.g3];
     const legendList = [];
     const comboSeries = [];
+
+    this.getDolpReferenceRings(summary, fitResult).forEach(ref => {
+      comboSeries.push({
+        name: `DoLP ${ref.label} reference`, type: 'line', coordinateSystem: 'polar', polarIndex: 0,
+        showSymbol: false, silent: true, data: Array.from({ length: 37 }, (_, i) => [ref.value, i * 10]),
+        lineStyle: { color: '#94a3b8', width: 1, type: 'dashed', opacity: 0.5 }, z: 0
+      });
+    });
 
     if (this.errorType !== 'none' && (this.displayMode === 'all' || this.displayMode === 'mean_error')) {
       const upperData = [];

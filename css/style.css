@@ -13,6 +13,8 @@
 .header-actions .ui-icon { width: 0.95rem; height: 0.95rem; }
 .logo-icon { display: grid; place-items: center; }
 .brand-icon { width: 1.35rem; height: 1.35rem; stroke-width: 1.65; }
+.section-title, .math-formula-title > span:first-child { display: inline-flex; align-items: center; gap: 0.35rem; }
+.section-icon { width: 0.9rem; height: 0.9rem; fill: none; stroke: var(--primary-600); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
 
 /* 辅助与微调样式 */
 .input-mode-switcher {

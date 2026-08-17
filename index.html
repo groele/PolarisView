@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>1/2波片偏振测量分析与极坐标工作台 (PLO Polar Studio)</title>
+  <title>PolarisView | 偏振数据分析</title>
   <meta name="description" content="专业级光学偏振与半波片旋转测量数据极坐标可视化、马吕斯理论拟合、物理参数反演、透明预处理8大多算法背景扣除、DoLP线偏振度解算与学术报告生成系统">
   <link rel="stylesheet" href="css/style.css">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
@@ -53,7 +53,7 @@
           <div id="tabDataBaseline" class="tab-pane">
             <div class="panel-section">
               <div class="section-header">
-                <span class="section-title">📥 实验数据源</span>
+                <span class="section-title"><svg class="section-icon"><use href="#i-table"/></svg>实验数据源</span>
                 <button id="btnResetData" class="btn btn-secondary btn-sm" title="恢复 Pol.txt 实测默认数据">恢复实测</button>
               </div>
 
@@ -103,7 +103,7 @@
             <!-- 背景扣除算法 (8大经典与前沿算法) -->
             <div class="panel-section" style="margin-top: 0.65rem;">
               <div class="section-header">
-                <span class="section-title">🧪 背景基线扣除算法</span>
+                <span class="section-title"><svg class="section-icon"><use href="#i-polar"/></svg>背景基线扣除算法</span>
                 <span id="bgStatusBadge" class="badge badge-success">已启用</span>
               </div>
               <div class="form-group">
@@ -234,7 +234,7 @@
               <!-- 透明预处理：数学公式与实时解析卡片 -->
               <div class="math-formula-box">
                 <div class="math-formula-title">
-                  <span>📐 透明预处理：数学模型与实时方程</span>
+                  <span><svg class="section-icon"><use href="#i-vector"/></svg>透明预处理：数学模型与实时方程</span>
                 </div>
                 <div id="mathEquationDisplay" class="math-equation-display">
                   y_sub(x) = y(x) - 7033.0
@@ -268,7 +268,7 @@
             <!-- 三组切片配置 (含智能相位锁定对齐) -->
             <div class="panel-section" style="margin-top: 0.65rem;">
               <div class="section-header">
-                <span class="section-title">✂️ 三组数据区间切片 (Slicing)</span>
+                <span class="section-title"><svg class="section-icon"><use href="#i-vector"/></svg>三组数据区间切片 (Slicing)</span>
               </div>
 
               <div style="margin-bottom:0.5rem;">
@@ -302,7 +302,7 @@
           <div id="tabFitVisual" class="tab-pane" style="display: none;">
             <div class="panel-section">
               <div class="section-header">
-                <span class="section-title">🎨 学术期刊视觉风格</span>
+                <span class="section-title"><svg class="section-icon"><use href="#i-image"/></svg>学术期刊视觉风格</span>
               </div>
               <div class="form-group">
                 <label class="form-label" for="journalTheme">期刊色彩方案</label>
@@ -318,7 +318,7 @@
 
             <div class="panel-section" style="margin-top:0.65rem;">
               <div class="section-header">
-                <span class="section-title">🌊 周期性滤波平滑算法</span>
+                <span class="section-title"><svg class="section-icon"><use href="#i-polar"/></svg>周期性滤波平滑算法</span>
               </div>
               <div class="form-group">
                 <label class="form-label" for="filterType">滤波平滑模式</label>
@@ -349,7 +349,7 @@
 
             <div class="panel-section" style="margin-top:0.65rem;">
               <div class="section-header">
-                <span class="section-title">🔬 马吕斯定律理论拟合 (Malus Fit)</span>
+                <span class="section-title"><svg class="section-icon"><use href="#i-polar"/></svg>马吕斯定律理论拟合 (Malus Fit)</span>
               </div>
               <div class="form-group">
                 <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.76rem;cursor:pointer;">
@@ -381,7 +381,7 @@
 
             <div class="panel-section" style="margin-top:0.65rem;">
               <div class="section-header">
-                <span class="section-title">🧭 极轴坐标网格微调</span>
+                <span class="section-title"><svg class="section-icon"><use href="#i-polar"/></svg>极轴坐标网格微调</span>
               </div>
               <div class="form-group">
                 <label class="form-label" for="polarStartAngle">0° 物理基准方向</label>
@@ -412,7 +412,7 @@
           <div id="tabStatsDetails" class="tab-pane" style="display: none;">
             <div class="panel-section">
               <div class="section-header">
-                <span class="section-title">🔬 偏振光学与反演特征参数 (含 DoLP)</span>
+                <span class="section-title"><svg class="section-icon"><use href="#i-polar"/></svg>偏振光学与反演特征参数 (含 DoLP)</span>
               </div>
               <div class="stats-grid">
                 <div class="stat-card">
@@ -452,7 +452,7 @@
 
             <div class="panel-section" style="margin-top: 0.65rem;">
               <div class="section-header">
-                <span class="section-title">📋 逐点 37 角度统计数据表</span>
+                <span class="section-title"><svg class="section-icon"><use href="#i-table"/></svg>逐点 37 角度统计数据表</span>
               </div>
               <div class="data-table-container">
                 <table class="data-table">
