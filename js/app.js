@@ -12,6 +12,7 @@ class PolarizationApp {
     this.currentRawPoints = [];
     this.isSyncing = false;
     this.activeView = 'polar';
+    this.analysisGroupVisibility = { group1: true, group2: true, group3: true };
 
     this.init();
   }
@@ -26,6 +27,11 @@ class PolarizationApp {
         'residualChart',
         'unifiedComboChart'
       );
+      this.chartManager.setGroupVisibility(this.analysisGroupVisibility);
+      this.chartManager.setGroupVisibilityChangeHandler((visibility) => {
+        this.analysisGroupVisibility = { ...this.analysisGroupVisibility, ...visibility };
+        this.processAndRender();
+      });
 
       // 2. 初始化表格式交互编辑组件
       this.tableGrid = new TableGrid('tableInputContainer', {
@@ -535,26 +541,11 @@ class PolarizationApp {
       // 净光强数据
       const processedPoints = this.currentRawPoints.map((pt, i) => ({
         ...pt,
+        sourceIndex: i,
         effectiveY: baselineResult.hasSubtracted ? baselineResult.subtracted[i] : pt.y
       }));
 
-      // 2. 马吕斯定律理论拟合与物理反演
-      const pointsForFit = processedPoints.map(p => ({
-        angle: p.angle,
-        rawX: p.rawX,
-        y: p.effectiveY
-      }));
-      const fitResult = MalusFitter.fitMalusLaw(pointsForFit);
-
-      // 3. 更新表格与异常点标记
-      this.tableGrid.setData(
-        this.currentRawPoints,
-        baselineResult.baseline,
-        baselineResult.subtracted,
-        fitResult ? fitResult.outliers.map(o => o.index) : null
-      );
-
-      // 4. 三组切片与统计计算 (含智能相位锁定)
+      // 2. 三组切片与统计计算 (含智能相位锁定)
       const g1Start = parseFloat(document.getElementById('g1Start').value) || 0;
       const g1End = parseFloat(document.getElementById('g1End').value) || 36;
       const g2Start = parseFloat(document.getElementById('g2Start').value) || 18;
@@ -564,22 +555,42 @@ class PolarizationApp {
       const autoPhaseLock = document.getElementById('autoPhaseLock') ? document.getElementById('autoPhaseLock').checked : false;
 
       const groupConfigs = [
-        { id: 'group1', name: `Group 1 (x: ${g1Start}~${g1End})`, start: g1Start, end: g1End, color: '#3b82f6' },
-        { id: 'group2', name: `Group 2 (x: ${g2Start}~${g2End})`, start: g2Start, end: g2End, color: '#10b981' },
-        { id: 'group3', name: `Group 3 (x: ${g3Start}~${g3End})`, start: g3Start, end: g3End, color: '#f59e0b' }
+        { id: 'group1', groupIndex: 0, name: `Group 1 (x: ${g1Start}~${g1End})`, start: g1Start, end: g1End, color: '#3b82f6' },
+        { id: 'group2', groupIndex: 1, name: `Group 2 (x: ${g2Start}~${g2End})`, start: g2Start, end: g2End, color: '#10b981' },
+        { id: 'group3', groupIndex: 2, name: `Group 3 (x: ${g3Start}~${g3End})`, start: g3Start, end: g3End, color: '#f59e0b' }
       ];
 
       const groups = DataParser.extractGroups(processedPoints, groupConfigs, multiplier, autoPhaseLock);
-      const stats = DataParser.computeStatistics(groups);
+      const activeGroups = groups.filter(g => this.analysisGroupVisibility[g.id] !== false);
+      const pointsForFit = activeGroups.flatMap(g => g.points.map(p => ({
+        angle: p.relAngle,
+        rawX: p.rawX,
+        sourceIndex: p.sourceIndex,
+        y: p.y
+      })));
+      const fitResult = MalusFitter.fitMalusLaw(pointsForFit);
+      const stats = DataParser.computeStatistics(activeGroups);
+      const excludedGroups = groups.filter(g => this.analysisGroupVisibility[g.id] === false);
+
+      // 3. 更新表格与异常点标记。离群点只来自当前可见且参与分析的数据组。
+      this.tableGrid.setData(
+        this.currentRawPoints,
+        baselineResult.baseline,
+        baselineResult.subtracted,
+        fitResult ? fitResult.outliers.map(o => o.sourceIndex).filter(Number.isFinite) : null
+      );
       const inputAudit = DataQuality.auditInput(this.currentRawPoints, multiplier);
-      const qualityAudit = DataQuality.auditProcessing(inputAudit, baselineResult, groups, fitResult, {
+      const qualityAudit = DataQuality.auditProcessing(inputAudit, baselineResult, activeGroups, fitResult, {
         autoPhaseLock, bgAlgo, clampZero
       });
+      qualityAudit.analysisGroups = activeGroups.map(g => g.name);
+      qualityAudit.excludedGroups = excludedGroups.map(g => g.name);
       this.updateQualityAudit(qualityAudit);
 
       this.parsedState = {
         allPoints: processedPoints,
         groups,
+        activeGroups,
         stats,
         fitResult,
         qualityAudit,
@@ -588,6 +599,8 @@ class PolarizationApp {
           angleMultiplier: multiplier,
           baseline: { algorithm: bgAlgo, options: bgOptions, clampZero },
           phaseAlignment: autoPhaseLock ? 'automatic peak alignment (visualization only)' : 'off',
+          analysisGroups: activeGroups.map(g => g.id),
+          excludedGroups: excludedGroups.map(g => g.id),
           fitModel: 'least-squares Fourier harmonic model: A0 + A4cos(4theta) + B4sin(4theta) + A2cos(2theta) + B2sin(2theta)'
         },
         rawBaselineResult: {

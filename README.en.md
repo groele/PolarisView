@@ -20,6 +20,7 @@ PolarisView is designed for polarization-optics workflows such as rotating-HWP/a
 - Supports editable point tables, pasted text, and dropped `.txt` / `.csv` / `.dat` files, with UTF-8 and GBK decoding attempts.
 - Accepts two-column `x, intensity` or one-column intensity input; the physical angle is explicitly defined as `x × angle multiplier`.
 - Audits usable-point count, angular coverage, duplicate x values, ordering, cycle coherence, clipping, phase locking, and fitting state.
+- Hiding a data group from the legend also excludes it from mean, SD/SE, smoothing, and Malus fitting; showing it again immediately restores it to analysis.
 - Opens with an empty workspace. The shipped `Pol.txt` is an optional example, preventing confusion between sample and user measurements.
 
 ### Transparent preprocessing

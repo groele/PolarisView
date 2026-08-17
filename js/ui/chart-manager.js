@@ -25,6 +25,9 @@ class PolarChartManager {
     this.errorType = 'sd';
     this.radiusZeroBased = false;
     this.resizeRafId = null;
+    this.groupVisibility = { group1: true, group2: true, group3: true };
+    this.legendVisibility = {};
+    this.groupVisibilityChangeHandler = null;
 
     this.polarAxisConfig = {
       startAngle: 0,
@@ -149,6 +152,59 @@ class PolarChartManager {
     this.render();
   }
 
+  setGroupVisibility(visibility) {
+    this.groupVisibility = { ...this.groupVisibility, ...visibility };
+  }
+
+  setGroupVisibilityChangeHandler(handler) {
+    this.groupVisibilityChangeHandler = typeof handler === 'function' ? handler : null;
+  }
+
+  legendSelection(legendNames, groups = []) {
+    return Object.fromEntries(legendNames.map(name => {
+      const group = groups.find(g => g.name === name);
+      return [name, group ? this.groupVisibility[group.id] !== false : this.legendVisibility[name] !== false];
+    }));
+  }
+
+  bindLegendInteraction(chart, groups = []) {
+    chart.off('legendselectchanged');
+    chart.on('legendselectchanged', (event) => {
+      const previouslyVisibleGroup = groups.find(group => this.groupVisibility[group.id] !== false);
+      const nextLegendVisibility = { ...this.legendVisibility, ...event.selected };
+      const nextGroupVisibility = { ...this.groupVisibility };
+      let groupChanged = false;
+
+      groups.forEach(group => {
+        if (!Object.prototype.hasOwnProperty.call(event.selected, group.name)) return;
+        const next = event.selected[group.name] !== false;
+        if (nextGroupVisibility[group.id] !== next) {
+          nextGroupVisibility[group.id] = next;
+          groupChanged = true;
+        }
+      });
+
+      // A statistical fit requires at least one data group. Keep the final group enabled.
+      if (groups.length && !groups.some(group => nextGroupVisibility[group.id] !== false)) {
+        const restored = previouslyVisibleGroup || groups[0];
+        nextGroupVisibility[restored.id] = true;
+        nextLegendVisibility[restored.name] = true;
+        this.groupVisibility = nextGroupVisibility;
+        this.legendVisibility = nextLegendVisibility;
+        this.render();
+        return;
+      }
+
+      this.groupVisibility = nextGroupVisibility;
+      this.legendVisibility = nextLegendVisibility;
+      if (groupChanged && this.groupVisibilityChangeHandler) {
+        this.groupVisibilityChangeHandler({ ...this.groupVisibility });
+      } else {
+        this.render();
+      }
+    });
+  }
+
   render() {
     if (!this.currentData || !this.currentData.groups || !this.currentData.stats) return;
 
@@ -159,8 +215,9 @@ class PolarChartManager {
     let minVal = Infinity;
     let maxVal = -Infinity;
     stepStats.forEach(s => {
-      minVal = Math.min(minVal, s.mean - (this.errorType === 'sd' ? s.sd : (this.errorType === 'se' ? s.se : 0)), ...s.values);
-      maxVal = Math.max(maxVal, s.mean + (this.errorType === 'sd' ? s.sd : (this.errorType === 'se' ? s.se : 0)), ...s.values);
+      const samples = (s.values || []).filter(Number.isFinite);
+      minVal = Math.min(minVal, s.mean - (this.errorType === 'sd' ? s.sd : (this.errorType === 'se' ? s.se : 0)), ...samples);
+      maxVal = Math.max(maxVal, s.mean + (this.errorType === 'sd' ? s.sd : (this.errorType === 'se' ? s.se : 0)), ...samples);
     });
 
     const valMargin = (maxVal - minVal) * 0.1 || 50;
@@ -342,6 +399,7 @@ class PolarChartManager {
       legend: {
         bottom: 6,
         data: legendData,
+        selected: this.legendSelection(legendData, groups),
         itemGap: 10,
         textStyle: { fontSize: 10.5 }
       },
@@ -377,6 +435,7 @@ class PolarChartManager {
     };
 
     chart.setOption(polarOption, true);
+    this.bindLegendInteraction(chart, groups);
   }
 
   renderCartesian(stepStats, groups, smoothedMeanList, summary, fitResult, palette) {
@@ -458,7 +517,7 @@ class PolarChartManager {
       },
       tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
       // Keep the metric subtitle and the series legend in separate rows.
-      legend: { top: 54, data: legendList, itemGap: 12, textStyle: { fontSize: 10 } },
+      legend: { top: 54, data: legendList, selected: this.legendSelection(legendList, groups), itemGap: 12, textStyle: { fontSize: 10 } },
       grid: { left: '6%', right: '4%', bottom: '12%', top: 88, containLabel: true },
       xAxis: { type: 'category', data: angles, name: '相对角度', axisLabel: { interval: 2, rotate: 25, fontSize: 10 } },
       yAxis: { type: 'value', name: '光强 (Counts)', scale: !this.radiusZeroBased },
@@ -466,6 +525,7 @@ class PolarChartManager {
     };
 
     chart.setOption(cartesianOption, true);
+    this.bindLegendInteraction(chart, groups);
   }
 
   renderBaselineChart(baselineResult) {
@@ -517,7 +577,7 @@ class PolarChartManager {
     const baselineOption = {
       title: { text: 'X-Y 坐标轴体系：原始数据、背景基线与扣除净信号预览', left: 'center', top: 6, textStyle: { fontSize: 13, fontWeight: '700' } },
       tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
-      legend: { top: 28, data: legend, textStyle: { fontSize: 10.5 } },
+      legend: { top: 28, data: legend, selected: this.legendSelection(legend), textStyle: { fontSize: 10.5 } },
       grid: { left: '5%', right: '4%', bottom: '12%', top: '22%', containLabel: true },
       xAxis: { type: 'category', data: xLabels, name: 'X (物理角度)', axisLabel: { interval: 5, rotate: 25, fontSize: 10 } },
       yAxis: { type: 'value', name: '光强数值', scale: true },
@@ -525,6 +585,7 @@ class PolarChartManager {
     };
 
     chart.setOption(baselineOption, true);
+    this.bindLegendInteraction(chart);
   }
 
   renderResidualChart(fitResult) {
@@ -801,6 +862,7 @@ class PolarChartManager {
       legend: {
         bottom: 6,
         data: legendList,
+        selected: this.legendSelection(legendList, groups),
         textStyle: { fontSize: 10.5 }
       },
       polar: {
@@ -847,6 +909,7 @@ class PolarChartManager {
     };
 
     chart.setOption(comboOption, true);
+    this.bindLegendInteraction(chart, groups);
   }
 
   async exportImage(chartType = 'polar', format = 'png', pixelRatio = 3) {

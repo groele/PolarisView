@@ -36,8 +36,9 @@ class ReportEngine {
 
       let minVal = Infinity, maxVal = -Infinity;
       stepStats.forEach(s => {
-        minVal = Math.min(minVal, s.mean - s.sd, ...s.values);
-        maxVal = Math.max(maxVal, s.mean + s.sd, ...s.values);
+        const samples = (s.values || []).filter(Number.isFinite);
+        minVal = Math.min(minVal, s.mean - s.sd, ...samples);
+        maxVal = Math.max(maxVal, s.mean + s.sd, ...samples);
       });
       const margin = (maxVal - minVal) * 0.1 || 50;
       const rMin = Math.max(0, Math.floor(minVal - margin));

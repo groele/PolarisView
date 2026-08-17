@@ -71,7 +71,9 @@ class DataQuality {
   static format(audit) {
     if (!audit) return '尚未执行质量审查。';
     const coherence = audit.groupCoherence === null || audit.groupCoherence === undefined ? '-' : audit.groupCoherence.toFixed(3);
-    const head = `有效点 ${audit.pointCount}｜角度覆盖 ${audit.angleSpan}°｜重复 x ${audit.duplicateX}｜周期一致性 ${coherence}｜负值截断 ${audit.clampedPoints || 0}`;
+    const included = Array.isArray(audit.analysisGroups) && audit.analysisGroups.length ? audit.analysisGroups.join('、') : '无';
+    const excluded = Array.isArray(audit.excludedGroups) && audit.excludedGroups.length ? `｜已隐藏且不参与分析 ${audit.excludedGroups.join('、')}` : '';
+    const head = `有效点 ${audit.pointCount}｜参与分析 ${included}${excluded}｜角度覆盖 ${audit.angleSpan}°｜重复 x ${audit.duplicateX}｜周期一致性 ${coherence}｜负值截断 ${audit.clampedPoints || 0}`;
     if (!audit.issues.length) return `${head}。未发现自动规则异常；仍需结合实验校准与原始记录判断。`;
     return `${head}。${audit.issues.map(x => `${x.severity === 'error' ? '错误' : '提示'}：${x.text}`).join(' ')}`;
   }

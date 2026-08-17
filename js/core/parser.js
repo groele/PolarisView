@@ -62,7 +62,7 @@ class DataParser {
     if (!Array.isArray(dataPoints) || dataPoints.length === 0) return [];
     const validMultiplier = Number.isFinite(multiplier) ? multiplier : 10;
 
-    const rawGroups = groupConfigs.map((cfg) => {
+    const rawGroups = groupConfigs.map((cfg, configIndex) => {
       const start = Number.isFinite(cfg.start) ? cfg.start : 0;
       const end = Number.isFinite(cfg.end) ? cfg.end : 36;
       const pointsInGroup = dataPoints.filter(p => p.rawX >= start && p.rawX <= end);
@@ -77,6 +77,7 @@ class DataParser {
         }
         return {
           rawX: p.rawX,
+          sourceIndex: p.sourceIndex,
           originalAngle: p.angle,
           relAngle: relAngle,
           y: Number.isFinite(p.effectiveY) ? p.effectiveY : (Number.isFinite(p.y) ? p.y : 0)
@@ -85,6 +86,7 @@ class DataParser {
 
       return {
         id: cfg.id,
+        groupIndex: Number.isFinite(cfg.groupIndex) ? cfg.groupIndex : configIndex,
         name: cfg.name,
         color: cfg.color,
         start: start,
@@ -144,13 +146,15 @@ class DataParser {
     if (!Array.isArray(groups) || groups.length === 0) return null;
 
     const angleMap = new Map();
+    const slotCount = Math.max(3, ...groups.map((g, gIdx) => (Number.isFinite(g.groupIndex) ? g.groupIndex : gIdx) + 1));
     groups.forEach((g, gIdx) => {
+      const groupIndex = Number.isFinite(g.groupIndex) ? g.groupIndex : gIdx;
       g.points.forEach(p => {
         const a = Math.round(p.relAngle);
         if (!angleMap.has(a)) {
           angleMap.set(a, []);
         }
-        angleMap.get(a).push({ groupIndex: gIdx, y: p.y });
+        angleMap.get(a).push({ groupIndex, y: p.y });
       });
     });
 
@@ -161,15 +165,17 @@ class DataParser {
 
     sortedAngles.forEach(angle => {
       const entries = angleMap.get(angle);
-      const values = entries.map(e => e.y);
-      const n = values.length;
+      const sampleValues = entries.map(e => e.y).filter(Number.isFinite);
+      const values = Array(slotCount).fill(undefined);
+      entries.forEach(e => { if (Number.isFinite(e.groupIndex)) values[e.groupIndex] = e.y; });
+      const n = sampleValues.length;
       
-      const sum = values.reduce((acc, val) => acc + val, 0);
+      const sum = sampleValues.reduce((acc, val) => acc + val, 0);
       const mean = n > 0 ? sum / n : 0;
       
       let variance = 0;
       if (n > 1) {
-        variance = values.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / (n - 1);
+        variance = sampleValues.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / (n - 1);
       }
       const sd = Math.sqrt(Math.max(0, variance));
       const se = n > 0 ? sd / Math.sqrt(n) : 0;
@@ -179,6 +185,7 @@ class DataParser {
         relAngle: angle,
         n: n,
         values: values,
+        sampleValues: sampleValues,
         mean: Number(mean.toFixed(2)),
         sd: Number(sd.toFixed(2)),
         se: Number(se.toFixed(2)),

@@ -91,6 +91,7 @@ class MalusFitter {
       residuals.push(res);
       fittedPoints.push({
         index: idx,
+        sourceIndex: p.sourceIndex,
         angle: p.angle,
         rawX: p.rawX,
         yRaw: p.y,
