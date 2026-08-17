@@ -28,7 +28,10 @@ class XlsxExporter {
       ['OriginPro_note', 'Import sheet OriginPro_Data; column A is X, columns B-D are repeats, columns E-H are derived statistics.']
     ];
 
+    const polarRows = [['Angle_deg', 'Mean', 'Group1', 'Group2', 'Group3']];
+    stats.forEach(s => polarRows.push([s.relAngle, s.mean, s.values[0] ?? '', s.values[1] ?? '', s.values[2] ?? '']));
     const blob = this.createWorkbook([
+      { name: 'Polar_Preview', rows: polarRows, nativePolarChart: true },
       { name: 'OriginPro_Data', rows: originRows },
       { name: 'Raw_Preprocessing', rows: rawRows },
       { name: 'Processing_Notes', rows: notes }
@@ -38,19 +41,27 @@ class XlsxExporter {
   }
 
   static createWorkbook(sheets) {
+    const chartSheets = sheets.map((sheet, i) => ({ ...sheet, index: i + 1 })).filter(sheet => sheet.nativePolarChart);
     const files = [
-      ['[Content_Types].xml', this.contentTypes(sheets.length)],
+      ['[Content_Types].xml', this.contentTypes(sheets.length, chartSheets.length > 0)],
       ['_rels/.rels', '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
       ['xl/workbook.xml', this.workbookXml(sheets)],
       ['xl/_rels/workbook.xml.rels', this.workbookRelationships(sheets.length)],
-      ...sheets.map((sheet, i) => [`xl/worksheets/sheet${i + 1}.xml`, this.sheetXml(sheet.rows)])
+      ...sheets.map((sheet, i) => [`xl/worksheets/sheet${i + 1}.xml`, this.sheetXml(sheet.rows, chartSheets.find(p => p.index === i + 1))]),
+      ...chartSheets.flatMap((sheet, i) => [
+        [`xl/worksheets/_rels/sheet${sheet.index}.xml.rels`, this.sheetRelationship(i + 1)],
+        [`xl/drawings/drawing${i + 1}.xml`, this.drawingXml()],
+        [`xl/drawings/_rels/drawing${i + 1}.xml.rels`, this.drawingRelationship(i + 1)],
+        [`xl/charts/chart${i + 1}.xml`, this.radarChartXml(sheet.name, sheet.rows)]
+      ])
     ];
     return new Blob([this.zipStore(files)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   }
 
-  static sheetXml(rows) {
+  static sheetXml(rows, previewSheet = null) {
     const rowXml = rows.map((row, r) => `<row r="${r + 1}">${row.map((value, c) => this.cellXml(value, c + 1, r + 1)).join('')}</row>`).join('');
-    return `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${rowXml}</sheetData></worksheet>`;
+    const drawing = previewSheet ? '<drawing r:id="rId1"/>' : '';
+    return `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetData>${rowXml}</sheetData>${drawing}</worksheet>`;
   }
 
   static cellXml(value, col, row) {
@@ -60,9 +71,10 @@ class XlsxExporter {
     return `<c r="${ref}" t="inlineStr"><is><t>${this.escapeXml(String(value))}</t></is></c>`;
   }
 
-  static contentTypes(count) {
+  static contentTypes(count, hasChart) {
     const overrides = Array.from({ length: count }, (_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('');
-    return `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${overrides}</Types>`;
+    const chartType = hasChart ? '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/><Override PartName="/xl/charts/chart1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>' : '';
+    return `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>${chartType}<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${overrides}</Types>`;
   }
 
   static workbookXml(sheets) {
@@ -73,10 +85,24 @@ class XlsxExporter {
     return `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${Array.from({ length: count }, (_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('')}</Relationships>`;
   }
 
+  static sheetRelationship(drawingIndex) { return `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing${drawingIndex}.xml"/></Relationships>`; }
+  static drawingRelationship(chartIndex) { return `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart${chartIndex}.xml"/></Relationships>`; }
+  static drawingXml() { return '<?xml version="1.0" encoding="UTF-8"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><xdr:twoCellAnchor editAs="oneCell"><xdr:from><xdr:col>6</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>19</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>27</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to><xdr:graphicFrame><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Polar chart"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId1"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>'; }
+  static radarChartXml(sheetName, rows) {
+    const count = Math.max(0, rows.length - 1), safeSheet = `'${sheetName.replace(/'/g, "''")}'`;
+    const categories = rows.slice(1).map(r => r[0]);
+    const cache = (values, tag = 'numCache') => `<c:${tag}><c:formatCode>General</c:formatCode><c:ptCount val="${values.length}"/>${values.map((v, i) => `<c:pt idx="${i}"><c:v>${v}</c:v></c:pt>`).join('')}</c:${tag}>`;
+    const series = [1, 2, 3, 4].map((col, i) => {
+      const values = rows.slice(1).map(r => Number(r[col]) || 0), title = rows[0][col];
+      return `<c:ser><c:idx val="${i}"/><c:order val="${i}"/><c:tx><c:strRef><c:f>${safeSheet}!$${this.columnName(col + 1)}$1</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>${title}</c:v></c:pt></c:strCache></c:strRef></c:tx><c:cat><c:numRef><c:f>${safeSheet}!$A$2:$A$${count + 1}</c:f>${cache(categories)}</c:numRef></c:cat><c:val><c:numRef><c:f>${safeSheet}!$${this.columnName(col + 1)}$2:$${this.columnName(col + 1)}$${count + 1}</c:f>${cache(values)}</c:numRef></c:val></c:ser>`;
+    }).join('');
+    return `<?xml version="1.0" encoding="UTF-8"?><c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="zh-CN"/><a:t>Polarization polar preview</a:t></a:r></a:p></c:rich></c:tx><c:layout/></c:title><c:plotArea><c:layout/><c:radarChart><c:radarStyle val="marker"/><c:varyColors val="0"/>${series}<c:axId val="1"/><c:axId val="2"/></c:radarChart><c:valAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:numFmt formatCode="General" sourceLinked="1"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:valAx><c:catAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="1"/><c:crosses val="autoZero"/></c:catAx></c:plotArea><c:legend><c:legendPos val="r"/><c:layout/></c:legend><c:plotVisOnly val="1"/></c:chart></c:chartSpace>`;
+  }
+
   static zipStore(files) {
     const encoder = new TextEncoder(); const parts = []; const central = []; let offset = 0;
     files.forEach(([name, text]) => {
-      const nameBytes = encoder.encode(name), data = encoder.encode(text), crc = this.crc32(data);
+      const nameBytes = encoder.encode(name), data = text instanceof Uint8Array ? text : encoder.encode(text), crc = this.crc32(data);
       const local = this.header(0x04034b50, [20, 0x0800, 0, 0, 0, crc, data.length, data.length, nameBytes.length, 0]);
       parts.push(local, nameBytes, data);
       central.push(this.header(0x02014b50, [20, 20, 0x0800, 0, 0, 0, crc, data.length, data.length, nameBytes.length, 0, 0, 0, 0, 0, offset]), nameBytes);

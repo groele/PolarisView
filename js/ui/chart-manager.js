@@ -852,6 +852,7 @@ class PolarChartManager {
     }
   }
 
+
   async exportDualStitchedImage(chartA, chartB, format = 'png', pixelRatio = 3) {
     if (!chartA || !chartB || chartA.isDisposed() || chartB.isDisposed()) return;
 
