@@ -60,8 +60,9 @@ class PolarizationApp {
         }
       });
 
-      // 5. 默认加载实测 Pol.txt 样本
-      this.loadPreset('real_pol');
+      // 5. 首次打开保持空白，不以示例数据替代用户自己的实验数据。
+      //    示例仍可从下拉框或“载入示例”按钮按需加载。
+      this.initializeEmptyDataset();
 
       // 6. 延迟触发尺寸校准，避免首屏 DOM 加载瞬态尺寸为 0
       setTimeout(() => {
@@ -77,7 +78,7 @@ class PolarizationApp {
     const presetSelector = document.getElementById('presetSelector');
     if (presetSelector) {
       presetSelector.addEventListener('change', (e) => {
-        this.loadPreset(e.target.value);
+        if (e.target.value) this.loadPreset(e.target.value);
       });
     }
 
@@ -384,6 +385,19 @@ class PolarizationApp {
     this.tableGrid.setAngleMultiplier(preset.multiplier);
     this.tableGrid.setData(this.currentRawPoints);
     this.processAndRender();
+  }
+
+  initializeEmptyDataset() {
+    const rawDataInput = document.getElementById('rawDataInput');
+    const presetSelector = document.getElementById('presetSelector');
+
+    if (rawDataInput) rawDataInput.value = '';
+    if (presetSelector) presetSelector.value = '';
+
+    this.currentRawPoints = [];
+    this.parsedState = null;
+    this.tableGrid.setData([]);
+    this.store.setState({ currentDatasetName: '未导入数据' });
   }
 
   readFile(file) {

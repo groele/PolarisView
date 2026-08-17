@@ -8,7 +8,7 @@ class StateStore {
     this.state = {
       theme: 'light',
       journalTheme: 'nature',
-      currentDatasetName: 'Pol.txt (实测数据)',
+      currentDatasetName: '未导入数据',
       latestMetrics: null,
       bgConfig: { algo: 'constant', clampZero: true },
       filterConfig: { type: 'gaussian', sigma: 1.2, enableSpline: true },

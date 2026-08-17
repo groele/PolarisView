@@ -26,12 +26,12 @@ PolarisView is designed for polarization-optics workflows such as rotating-HWP/a
 - 支持表格逐点编辑、文本粘贴、拖放 `.txt` / `.csv` / `.dat`，自动尝试 UTF-8 与 GBK 解码。
 - 支持 `x, intensity` 两列或单列强度数据；物理角度由 `x × angle multiplier` 显式定义。
 - 自动检查有效点数、角度覆盖、重复 x、乱序、三段周期一致性、负值截断、相位锁定和拟合状态。
-- 默认实测预设与随扩展发布的 `Pol.txt` 保持一致，避免预设与示例文件漂移。
+- 工作台首次打开保持空白；`Pol.txt` 仅作为可选示例，避免示例曲线与用户实测数据混淆。
 
 - Supports editable point tables, pasted text, and dropped `.txt` / `.csv` / `.dat` files, with UTF-8 and GBK decoding attempts.
 - Accepts two-column `x, intensity` or one-column intensity input; the physical angle is explicitly `x × angle multiplier`.
 - Audits usable-point count, angular coverage, duplicate x values, ordering, cycle coherence, clipping, phase locking, and fitting state.
-- Keeps the built-in measured preset aligned with the shipped `Pol.txt` sample.
+- Opens with an empty workspace; the shipped `Pol.txt` is an optional example, preventing confusion between sample and user measurements.
 
 ### 透明预处理 | Transparent preprocessing
 

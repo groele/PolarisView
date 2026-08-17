@@ -54,7 +54,7 @@
             <div class="panel-section">
               <div class="section-header">
                 <span class="section-title"><svg class="section-icon"><use href="#i-table"/></svg>实验数据源</span>
-                <button id="btnResetData" class="btn btn-secondary btn-sm" title="恢复 Pol.txt 实测默认数据">恢复实测</button>
+                <button id="btnResetData" class="btn btn-secondary btn-sm" title="可选：载入 Pol.txt 实测示例数据">载入示例</button>
               </div>
 
               <!-- 预设样本 -->
@@ -63,7 +63,8 @@
                   <span>预设样本 / 仿真模型:</span>
                 </label>
                 <select id="presetSelector" class="select-input">
-                  <option value="real_pol" selected>实测数据 (Pol.txt - 旋转两周 73 点)</option>
+                  <option value="" selected>不加载示例（请导入自己的数据）</option>
+                  <option value="real_pol">实测数据示例 (Pol.txt - 旋转两周 73 点)</option>
                   <option value="ideal_hwp">理论仿真: 理想 1/2 波片 (消光比极优)</option>
                   <option value="retardance_error">误差仿真: 相位延迟偏差波片 (δ=165°)</option>
                   <option value="linear_drift">漂移仿真: 光源线性功率漂移样本</option>
