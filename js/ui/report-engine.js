@@ -485,15 +485,17 @@ class ReportEngine {
       background: #1d4ed8;
       box-shadow: 0 6px 16px rgba(37,99,235,0.4);
     }
+    .btn-print:disabled { opacity: 0.72; cursor: wait; }
     @media print {
       .btn-print { display: none; }
       body { padding: 0; max-width: 100%; }
       .polar-figure-card { box-shadow: none; border-color: #cbd5e1; }
     }
+    @page { size: A4; margin: 12mm; }
   </style>
 </head>
 <body>
-  <button class="btn-print" onclick="window.print()">🖨️ 打印 / 导出为 PDF</button>
+  <button id="btnPrintPdf" class="btn-print" type="button">打印 / 导出为 PDF</button>
 
   <div class="report-header">
     <h1 class="report-title">1/2波片旋转测量偏振特性学术分析报告</h1>
@@ -600,6 +602,28 @@ class ReportEngine {
     reportWin.document.open();
     reportWin.document.write(reportHtml);
     reportWin.document.close();
+
+    // Do not use inline onclick: extension CSP can silently block it.
+    const printButton = reportWin.document.getElementById('btnPrintPdf');
+    if (printButton) {
+      const resetPrintButton = () => {
+        printButton.disabled = false;
+        printButton.textContent = '打印 / 导出为 PDF';
+      };
+      printButton.addEventListener('click', () => {
+        printButton.disabled = true;
+        printButton.textContent = '正在打开打印窗口…';
+        try {
+          reportWin.focus();
+          reportWin.print();
+        } catch (err) {
+          console.error('打开打印对话框失败:', err);
+          alert('无法打开系统打印窗口。请检查浏览器的弹窗和打印权限后重试。');
+          resetPrintButton();
+        }
+      });
+      reportWin.addEventListener('afterprint', resetPrintButton);
+    }
   }
 }
 
