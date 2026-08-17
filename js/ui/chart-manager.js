@@ -434,13 +434,14 @@ class PolarChartManager {
         text: '直角坐标角度-光强响应曲线 (Cartesian Plot)',
         subtext: `DoLP: ${dolpDisplay}% | 消光比: ${summary.extinctionRatio} | 调制度: ${summary.modulationPercent}%`,
         left: 'center',
-        top: 6,
+        top: 8,
         textStyle: { fontSize: 13, fontWeight: '700' },
-        subtextStyle: { fontSize: 10.5, color: '#64748b' }
+        subtextStyle: { fontSize: 10, color: '#64748b', lineHeight: 16 }
       },
       tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
-      legend: { top: 30, data: legendList, textStyle: { fontSize: 10.5 } },
-      grid: { left: '6%', right: '4%', bottom: '12%', top: '22%', containLabel: true },
+      // Keep the metric subtitle and the series legend in separate rows.
+      legend: { top: 54, data: legendList, itemGap: 12, textStyle: { fontSize: 10 } },
+      grid: { left: '6%', right: '4%', bottom: '12%', top: 88, containLabel: true },
       xAxis: { type: 'category', data: angles, name: '相对角度', axisLabel: { interval: 2, rotate: 25, fontSize: 10 } },
       yAxis: { type: 'value', name: '光强 (Counts)', scale: !this.radiusZeroBased },
       series: cartesianSeries
