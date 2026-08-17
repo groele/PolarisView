@@ -1,0 +1,48 @@
+/**
+ * Inspectable quality gate for measurement imports and derived conclusions.
+ * It never changes a measurement; it only records evidence and limits claims.
+ */
+class DataQuality {
+  static auditInput(points, multiplier) {
+    const issues = [];
+    const n = Array.isArray(points) ? points.length : 0;
+    if (n < 9) issues.push({ severity: 'error', text: `仅 ${n} 个有效点；不足以支撑稳定的周期拟合（建议至少 9 点/90° 周期）。` });
+    const xs = new Set();
+    let duplicates = 0;
+    let unordered = 0;
+    (points || []).forEach((p, i) => {
+      const key = String(p.rawX);
+      if (xs.has(key)) duplicates++; else xs.add(key);
+      if (i && p.rawX < points[i - 1].rawX) unordered++;
+    });
+    if (duplicates) issues.push({ severity: 'warn', text: `发现 ${duplicates} 个重复 x 坐标；重复值被保留，并会影响逐点统计。` });
+    if (unordered) issues.push({ severity: 'warn', text: `发现 ${unordered} 处非递增采样顺序；基线按导入顺序计算，请确认时间顺序。` });
+    const angles = (points || []).map(p => p.angle).filter(Number.isFinite);
+    const span = angles.length ? Math.max(...angles) - Math.min(...angles) : 0;
+    if (span < 90) issues.push({ severity: 'warn', text: `角度覆盖仅 ${span.toFixed(1)}°；无法充分检验 90° 周期的马吕斯响应。` });
+    if (!Number.isFinite(multiplier) || multiplier <= 0) issues.push({ severity: 'error', text: '角度换算倍率必须为正数。' });
+    return { pointCount: n, angleSpan: Number(span.toFixed(2)), duplicateX: duplicates, unordered, issues };
+  }
+
+  static auditProcessing(inputAudit, baselineResult, groups, fitResult, config) {
+    const issues = [...(inputAudit.issues || [])];
+    const clamped = baselineResult?.telemetry?.clampedPointsCount || 0;
+    if (clamped) issues.push({ severity: 'warn', text: `已截断 ${clamped} 个负净值为零；消光比与 DoLP 可能被上调，仅作处理后指标。` });
+    if (config.autoPhaseLock) issues.push({ severity: 'warn', text: '已启用自动相位锁定；该操作用于可视化对齐，不能替代机械零位校准或用于评估重复性。' });
+    const sizes = (groups || []).map(g => g.points.length);
+    if (sizes.some(s => s < 5)) issues.push({ severity: 'warn', text: `至少一组切片少于 5 点（组大小：${sizes.join('/')}）；组间均值与误差带不稳健。` });
+    if (fitResult && fitResult.params.rSquared < 0.9) issues.push({ severity: 'warn', text: `拟合 R²=${fitResult.params.rSquaredPercent}%；马吕斯模型与数据一致性有限，不应据此作强物理反演。` });
+    if (!fitResult) issues.push({ severity: 'error', text: '拟合未完成；不输出基于拟合的物理参数。' });
+    const claimLevel = issues.some(x => x.severity === 'error') ? 'blocked' : issues.some(x => x.severity === 'warn') ? 'qualified' : 'supported';
+    return { ...inputAudit, clampedPoints: clamped, groupSizes: sizes, claimLevel, issues };
+  }
+
+  static format(audit) {
+    if (!audit) return '尚未执行质量审查。';
+    const head = `有效点 ${audit.pointCount}｜角度覆盖 ${audit.angleSpan}°｜重复 x ${audit.duplicateX}｜负值截断 ${audit.clampedPoints || 0}`;
+    if (!audit.issues.length) return `${head}。未发现自动规则异常；仍需结合实验校准与原始记录判断。`;
+    return `${head}。${audit.issues.map(x => `${x.severity === 'error' ? '错误' : '提示'}：${x.text}`).join(' ')}`;
+  }
+}
+
+if (typeof window !== 'undefined') window.DataQuality = DataQuality;

@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>1/2波片偏振测量分析与极坐标工作台 (PLO Polar Studio)</title>
+  <meta name="description" content="专业级光学偏振与半波片旋转测量数据极坐标可视化、马吕斯理论拟合、物理参数反演、透明预处理8大多算法背景扣除、DoLP线偏振度解算与学术报告生成系统">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+</head>
+<body data-theme="light">
+  <div class="app-container">
+    <!-- 顶部导航栏 -->
+    <header class="app-header">
+      <div class="brand-section">
+        <div class="logo-icon">⨀</div>
+        <div>
+          <h1 class="brand-title">1/2波片旋转测量偏振分析工作台</h1>
+          <div class="brand-subtitle">Half-Wave Plate Polarization, Transparent Preprocessing & DoLP Studio</div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="btnGenerateReport" class="btn btn-primary btn-sm" title="一键生成学术级实验分析报告与 PDF 打印">📑 实验报告</button>
+        <button id="btnExportPng" class="btn btn-primary btn-sm" title="导出 300DPI 超清论文插图 (自动适配当前单图/同图/双联模式)">🖼️ 导出 4K 图</button>
+        <button id="btnExportSvg" class="btn btn-secondary btn-sm" title="导出矢量图 SVG">📐 SVG</button>
+        <button id="btnExportCsv" class="btn btn-secondary btn-sm" title="导出三组数据、基线与统计结果为 CSV">📊 CSV</button>
+        <button id="themeToggle" class="btn btn-secondary btn-sm" title="切换暗室荧光实验/明亮主题">🌙 暗色模式</button>
+      </div>
+    </header>
+
+    <!-- 主工作区 -->
+    <main class="app-body">
+      <!-- 左侧控制面板 (流线化 3 大步骤) -->
+      <aside class="sidebar">
+        <nav class="sidebar-tab-nav">
+          <button class="tab-btn active" data-tab="tabDataBaseline">1. 数据与预处理</button>
+          <button class="tab-btn" data-tab="tabFitVisual">2. 图形与理论拟合</button>
+          <button class="tab-btn" data-tab="tabStatsDetails">3. 物理指标与报表</button>
+        </nav>
+
+        <div class="sidebar-content">
+          <!-- Step 1: 数据录入与透明背景扣除 -->
+          <div id="tabDataBaseline" class="tab-pane">
+            <div class="panel-section">
+              <div class="section-header">
+                <span class="section-title">📥 实验数据源</span>
+                <button id="btnResetData" class="btn btn-secondary btn-sm" title="恢复 Pol.txt 实测默认数据">恢复实测</button>
+              </div>
+
+              <!-- 预设样本 -->
+              <div class="form-group">
+                <label class="form-label" for="presetSelector">
+                  <span>预设样本 / 仿真模型:</span>
+                </label>
+                <select id="presetSelector" class="select-input">
+                  <option value="real_pol" selected>实测数据 (Pol.txt - 旋转两周 73 点)</option>
+                  <option value="ideal_hwp">理论仿真: 理想 1/2 波片 (消光比极优)</option>
+                  <option value="retardance_error">误差仿真: 相位延迟偏差波片 (δ=165°)</option>
+                  <option value="linear_drift">漂移仿真: 光源线性功率漂移样本</option>
+                </select>
+              </div>
+
+              <!-- 录入模式切换 -->
+              <div class="input-mode-switcher">
+                <button id="btnModeTable" class="input-mode-btn active">📊 表格式交互编辑</button>
+                <button id="btnModeText" class="input-mode-btn">📝 文本粘贴/拖拽上传</button>
+              </div>
+
+              <!-- 表格式输入区 -->
+              <div id="tableInputContainer" class="table-grid-container"></div>
+
+              <!-- 纯文本/拖拽上传区 -->
+              <div id="textInputContainer" style="display: none;">
+                <div class="form-group">
+                  <textarea id="rawDataInput" class="textarea-input" placeholder="0&#9;7119&#10;1&#9;7191..."></textarea>
+                </div>
+                <div class="form-group">
+                  <div id="dropZone" class="drop-zone">
+                    📂 点击或拖拽数据文件 (.txt, .csv, 支持GBK/UTF-8)
+                    <input type="file" id="fileInput" accept=".txt,.csv,.dat" style="display: none;">
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-group" style="margin-top: 0.55rem;">
+                <label class="form-label" for="angleMultiplier">
+                  <span>角度换算倍率 (物理角度 = x × 系数)</span>
+                </label>
+                <input type="number" id="angleMultiplier" class="input-text" value="10" step="1">
+              </div>
+            </div>
+
+            <!-- 背景扣除算法 (8大经典与前沿算法) -->
+            <div class="panel-section" style="margin-top: 0.65rem;">
+              <div class="section-header">
+                <span class="section-title">🧪 背景基线扣除算法</span>
+                <span id="bgStatusBadge" class="badge badge-success">已启用</span>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="baselineAlgo">预处理算法模型库</label>
+                <select id="baselineAlgo" class="select-input">
+                  <option value="none">不扣除背景 (保留原始测量值)</option>
+                  <option value="constant" selected>1. 恒定常数/暗电流扣除 (Constant / Min)</option>
+                  <option value="airpls">2. airPLS 自适应迭代重加权惩罚最小二乘（需参数敏感性验证）</option>
+                  <option value="asls">3. AsLS 非对称重加权最小二乘 (Eilers-Boelens)</option>
+                  <option value="snip">4. SNIP 敏感非线性迭代峰值剪切法 (核物理与光谱经典)</option>
+                  <option value="rubberband">5. Rubberband 橡皮筋下凸包包络法</option>
+                  <option value="polynomial">6. 多项式回归拟合基线 (Polynomial Baseline)</option>
+                  <option value="linear">7. 线性漂移基线 (Linear Baseline)</option>
+                  <option value="moving_min">8. 滑动极小值形态学滤波 (Rolling Min)</option>
+                </select>
+              </div>
+
+              <!-- 1. 恒定背景参数 -->
+              <div id="cfgConstant" class="algo-param-box">
+                <div class="form-group">
+                  <label class="form-label" for="constMode">常数取值策略</label>
+                  <select id="constMode" class="select-input">
+                    <option value="min" selected>全局最小值 min(y)（显示归零；不等同暗电流测量）</option>
+                    <option value="bottom_avg">最低 10% 采样点均值</option>
+                    <option value="custom">手动输入指定底噪常数</option>
+                  </select>
+                </div>
+                <div class="form-group" id="customConstGroup" style="display: none;">
+                  <label class="form-label" for="customConstVal">自定义常数底噪 (Counts):</label>
+                  <input type="number" id="customConstVal" class="input-text" value="7050">
+                </div>
+              </div>
+
+              <!-- 2. airPLS 参数 -->
+              <div id="cfgAirpls" class="algo-param-box" style="display: none;">
+                <div class="form-group">
+                  <label class="form-label">
+                    <span>平滑惩罚系数 (log10 λ):</span>
+                    <span id="airplsLambdaVal" class="slider-val">4.0 (1e4)</span>
+                  </label>
+                  <div class="slider-container">
+                    <input type="range" id="airplsLambda" class="range-slider" min="2" max="7" step="0.5" value="4">
+                  </div>
+                </div>
+              </div>
+
+              <!-- 3. AsLS 参数 -->
+              <div id="cfgAsls" class="algo-param-box" style="display: none;">
+                <div class="form-group">
+                  <label class="form-label">
+                    <span>平滑惩罚系数 (log10 λ):</span>
+                    <span id="aslsLambdaVal" class="slider-val">4.0 (1e4)</span>
+                  </label>
+                  <div class="slider-container">
+                    <input type="range" id="aslsLambda" class="range-slider" min="2" max="7" step="0.5" value="4">
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">
+                    <span>非对称权重因子 p (峰值保护):</span>
+                    <span id="aslsPVal" class="slider-val">0.01</span>
+                  </label>
+                  <div class="slider-container">
+                    <input type="range" id="aslsP" class="range-slider" min="0.001" max="0.1" step="0.005" value="0.01">
+                  </div>
+                </div>
+              </div>
+
+              <!-- 4. SNIP 参数 -->
+              <div id="cfgSnip" class="algo-param-box" style="display: none;">
+                <div class="form-group">
+                  <label class="form-label">
+                    <span>峰值剪切窗口阶数 (Clipping Order):</span>
+                    <span id="snipWindowVal" class="slider-val">8</span>
+                  </label>
+                  <div class="slider-container">
+                    <input type="range" id="snipWindow" class="range-slider" min="2" max="18" step="1" value="8">
+                  </div>
+                </div>
+              </div>
+
+              <!-- 5. Rubberband 参数 -->
+              <div id="cfgRubberband" class="algo-param-box" style="display: none;">
+                <div class="form-group">
+                  <label class="form-label">
+                    <span>凸包支撑节点数 (Segments):</span>
+                    <span id="rubberbandSegVal" class="slider-val">6</span>
+                  </label>
+                  <div class="slider-container">
+                    <input type="range" id="rubberbandSeg" class="range-slider" min="3" max="15" step="1" value="6">
+                  </div>
+                </div>
+              </div>
+
+              <!-- 6. 多项式参数 -->
+              <div id="cfgPoly" class="algo-param-box" style="display: none;">
+                <div class="form-group">
+                  <label class="form-label">
+                    <span>多项式阶数 (Degree):</span>
+                    <span id="polyDegreeVal" class="slider-val">2</span>
+                  </label>
+                  <div class="slider-container">
+                    <input type="range" id="polyDegree" class="range-slider" min="1" max="5" step="1" value="2">
+                  </div>
+                </div>
+              </div>
+
+              <!-- 8. 滚动极小值参数 -->
+              <div id="cfgMovingMin" class="algo-param-box" style="display: none;">
+                <div class="form-group">
+                  <label class="form-label">
+                    <span>滑动极小值窗口宽度:</span>
+                    <span id="movingMinWindowVal" class="slider-val">9</span>
+                  </label>
+                  <div class="slider-container">
+                    <input type="range" id="movingMinWindow" class="range-slider" min="3" max="25" step="2" value="9">
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-group" style="margin-top: 0.5rem;">
+                <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.76rem;cursor:pointer;">
+                  <input type="checkbox" id="clampZero" checked>
+                  <span>截断负值归零 (净光强 y_sub ≥ 0)</span>
+                </label>
+              </div>
+
+              <!-- 透明预处理：数学公式与实时解析卡片 -->
+              <div class="math-formula-box">
+                <div class="math-formula-title">
+                  <span>📐 透明预处理：数学模型与实时方程</span>
+                </div>
+                <div id="mathEquationDisplay" class="math-equation-display">
+                  y_sub(x) = y(x) - 7033.0
+                </div>
+                <div id="mathDesc" class="math-desc">
+                  <b>模型原理</b>：提取探测器本底暗电流常数偏置 I_bg 并整体平移，将偏振消光极小值校准至零基准面。
+                </div>
+
+                <!-- 实时遥测指标 -->
+                <div class="telemetry-grid">
+                  <div class="telemetry-card">
+                    <div class="telemetry-label">平均背景底噪</div>
+                    <div id="telemetryBgMean" class="telemetry-val">-</div>
+                  </div>
+                  <div class="telemetry-card">
+                    <div class="telemetry-label">净峰值光强</div>
+                    <div id="telemetrySubMax" class="telemetry-val">-</div>
+                  </div>
+                  <div class="telemetry-card">
+                    <div class="telemetry-label">底噪占比</div>
+                    <div id="telemetryBgRatio" class="telemetry-val">-</div>
+                  </div>
+                </div>
+              </div>
+              <div class="math-formula-box" style="margin-top:0.55rem;">
+                <div class="math-formula-title"><span>🛡️ 数据质量与结论边界</span><span id="qualityBadge" class="badge">待审查</span></div>
+                <div id="qualityAudit" class="math-desc">导入或编辑数据后自动生成质量审查。审查不会修改原始测量值。</div>
+              </div>
+            </div>
+
+            <!-- 三组切片配置 (含智能相位锁定对齐) -->
+            <div class="panel-section" style="margin-top: 0.65rem;">
+              <div class="section-header">
+                <span class="section-title">✂️ 三组数据区间切片 (Slicing)</span>
+              </div>
+
+              <div style="margin-bottom:0.5rem;">
+                <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.76rem;font-weight:600;color:var(--primary-600);cursor:pointer;">
+                  <input type="checkbox" id="autoPhaseLock">
+                  <span>🎯 智能相位锁定对齐 (自动消除 180° 错相相消)</span>
+                </label>
+              </div>
+
+              <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:0.35rem;">
+                <div class="form-group">
+                  <label class="form-label" style="font-size:0.68rem;">Group 1 (x):</label>
+                  <input type="number" id="g1Start" class="input-text" value="0" style="margin-bottom:2px;">
+                  <input type="number" id="g1End" class="input-text" value="36">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" style="font-size:0.68rem;">Group 2 (x):</label>
+                  <input type="number" id="g2Start" class="input-text" value="18" style="margin-bottom:2px;">
+                  <input type="number" id="g2End" class="input-text" value="54">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" style="font-size:0.68rem;">Group 3 (x):</label>
+                  <input type="number" id="g3Start" class="input-text" value="36" style="margin-bottom:2px;">
+                  <input type="number" id="g3End" class="input-text" value="72">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 2: 图形控制与马吕斯理论拟合 -->
+          <div id="tabFitVisual" class="tab-pane" style="display: none;">
+            <div class="panel-section">
+              <div class="section-header">
+                <span class="section-title">🎨 学术期刊视觉风格</span>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="journalTheme">期刊色彩方案</label>
+                <select id="journalTheme" class="select-input">
+                  <option value="nature" selected>Nature / Science 经典学术风</option>
+                  <option value="science">Cell / Science 蓝绿学术风</option>
+                  <option value="prl">PRL (Physical Review Letters) 物理风</option>
+                  <option value="ieee">IEEE Transactions 工程严谨风</option>
+                  <option value="dark_lab">Dark Lab 暗室荧光实验风</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="panel-section" style="margin-top:0.65rem;">
+              <div class="section-header">
+                <span class="section-title">🌊 周期性滤波平滑算法</span>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="filterType">滤波平滑模式</label>
+                <select id="filterType" class="select-input">
+                  <option value="gaussian" selected>高斯滤波平滑 (Gaussian Filter)</option>
+                  <option value="sg">Savitzky-Golay 多项式平滑 (S-G)</option>
+                  <option value="fourier">傅里叶光学谐波滤波 (Fourier Low-pass)</option>
+                  <option value="moving_avg">周期滑动平均滤波 (Moving Average)</option>
+                  <option value="none">不进行平滑 (仅显示原始均值)</option>
+                </select>
+              </div>
+              <div class="form-group" id="smoothSliderGroup">
+                <label class="form-label">
+                  <span id="smoothParamLabel">高斯 Sigma:</span>
+                  <span id="smoothSliderVal" class="slider-val">1.2</span>
+                </label>
+                <div class="slider-container">
+                  <input type="range" id="smoothSlider" class="range-slider" min="0.3" max="3.0" step="0.1" value="1.2">
+                </div>
+              </div>
+              <div class="form-group" style="margin-top: 0.5rem;">
+                <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.76rem;cursor:pointer;">
+                  <input type="checkbox" id="enableSpline" checked>
+                  <span>启用 360 点高密度周期样条拟合曲线</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="panel-section" style="margin-top:0.65rem;">
+              <div class="section-header">
+                <span class="section-title">🔬 马吕斯定律理论拟合 (Malus Fit)</span>
+              </div>
+              <div class="form-group">
+                <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.76rem;cursor:pointer;">
+                  <input type="checkbox" id="showTheoreticalFit" checked>
+                  <span>在图表中叠加理论马吕斯曲线 (Malus Curve)</span>
+                </label>
+              </div>
+
+              <div class="form-group" style="margin-top:0.5rem;">
+                <label class="form-label" for="errorType">误差阴影带模式</label>
+                <select id="errorType" class="select-input">
+                  <option value="sd" selected>标准差阴影带 (Mean ± SD, 1σ)</option>
+                  <option value="se">标准误差阴影带 (Mean ± SE)</option>
+                  <option value="none">不显示误差阴影</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="groupFilter">组别重叠筛选</label>
+                <select id="groupFilter" class="select-input">
+                  <option value="all" selected>全部重叠对比 (All Overlaid + Mean)</option>
+                  <option value="mean_error">仅显示均值与误差带 (Mean & Error Band)</option>
+                  <option value="group1">单独预览 Group 1 (x: 0~36)</option>
+                  <option value="group2">单独预览 Group 2 (x: 18~54)</option>
+                  <option value="group3">单独预览 Group 3 (x: 36~72)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="panel-section" style="margin-top:0.65rem;">
+              <div class="section-header">
+                <span class="section-title">🧭 极轴坐标网格微调</span>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="polarStartAngle">0° 物理基准方向</label>
+                <select id="polarStartAngle" class="select-input">
+                  <option value="0" selected>正东方向 (0° East / 标准笛卡尔角)</option>
+                  <option value="90">正北方向 (90° North / 罗盘方位角)</option>
+                </select>
+              </div>
+              <div class="form-group" id="polarGridIntervalGroup">
+                <label class="form-label" for="polarGridInterval">极坐标网格角度分度</label>
+                <select id="polarGridInterval" class="select-input">
+                  <option value="15">15° 细分网格</option>
+                  <option value="30" selected>30° 标准网格</option>
+                  <option value="45">45° 正交对角网格</option>
+                  <option value="60">60° 粗网格</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-top: 0.5rem;">
+                <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.76rem;cursor:pointer;">
+                  <input type="checkbox" id="radiusZeroBased">
+                  <span>极坐标半径轴从 0 计数 (绝对比例)</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 3: 物理指标与报表明细 (含 DoLP 矩阵) -->
+          <div id="tabStatsDetails" class="tab-pane" style="display: none;">
+            <div class="panel-section">
+              <div class="section-header">
+                <span class="section-title">🔬 偏振光学与反演特征参数 (含 DoLP)</span>
+              </div>
+              <div class="stats-grid">
+                <div class="stat-card">
+                  <div class="stat-label">线偏振度 (DoLP)</div>
+                  <div id="statDolp" class="stat-value" style="color:#2563eb;">-</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-label">消光比 (ER)</div>
+                  <div id="statExtinctionRatio" class="stat-value">-</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-label">消光比 (dB)</div>
+                  <div id="statExtinctionDB" class="stat-value">-</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-label">调制度 (Modulation)</div>
+                  <div id="statModulation" class="stat-value">-</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-label">快轴初始偏角 θ₀</div>
+                  <div id="fitTheta0" class="stat-value" style="color:#059669;">-</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-label">拟合优度 R²</div>
+                  <div id="fitRSquared" class="stat-value" style="color:#2563eb;">-</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-label">波片延迟误差 Δδ</div>
+                  <div id="fitRetardance" class="stat-value">-</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-label">均方根误差 (RMSE)</div>
+                  <div id="fitRmse" class="stat-value">-</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel-section" style="margin-top: 0.65rem;">
+              <div class="section-header">
+                <span class="section-title">📋 逐点 37 角度统计数据表</span>
+              </div>
+              <div class="data-table-container">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>角度</th>
+                      <th>G1</th>
+                      <th>G2</th>
+                      <th>G3</th>
+                      <th>均值</th>
+                      <th>SD</th>
+                      <th>SE</th>
+                      <th>RSD%</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dataTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 右侧图表主舞台 -->
+      <section class="main-stage">
+        <!-- 顶部实时核心 KPI 指标横幅 (单行水平排布) -->
+        <div class="kpi-ribbon">
+          <div class="kpi-item">
+            <span class="kpi-icon">💎</span>
+            <div class="kpi-info">
+              <span class="kpi-label">线偏振度 (DoLP)</span>
+              <span id="ribbonDolp" class="kpi-val kpi-highlight">98.81%</span>
+            </div>
+          </div>
+          <div class="kpi-item">
+            <span class="kpi-icon">🎯</span>
+            <div class="kpi-info">
+              <span class="kpi-label">消光比 (ER)</span>
+              <span id="ribbonER" class="kpi-val kpi-highlight">83.16</span>
+            </div>
+          </div>
+          <div class="kpi-item">
+            <span class="kpi-icon">🔬</span>
+            <div class="kpi-info">
+              <span class="kpi-label">快轴偏角 θ₀</span>
+              <span id="ribbonTheta" class="kpi-val kpi-success">13.12°</span>
+            </div>
+          </div>
+          <div class="kpi-item">
+            <span class="kpi-icon">📈</span>
+            <div class="kpi-info">
+              <span class="kpi-label">拟合优度 R²</span>
+              <span id="ribbonR2" class="kpi-val kpi-highlight">99.593%</span>
+            </div>
+          </div>
+          <div class="kpi-item">
+            <span class="kpi-icon">🌊</span>
+            <div class="kpi-info">
+              <span class="kpi-label">底噪 I_bg (占比)</span>
+              <span id="ribbonBg" class="kpi-val">7033 (79.4%)</span>
+            </div>
+          </div>
+          <div class="kpi-item">
+            <span class="kpi-icon">⚡</span>
+            <div class="kpi-info">
+              <span class="kpi-label">调制度 Depth</span>
+              <span id="ribbonModulation" class="kpi-val">97.62%</span>
+            </div>
+          </div>
+          <div class="kpi-item">
+            <span class="kpi-icon">📊</span>
+            <div class="kpi-info">
+              <span class="kpi-label">均方根 RMSE</span>
+              <span id="ribbonRmse" class="kpi-val">39.81</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 顶部视图分段胶囊控制器 -->
+        <div class="toolbar">
+          <div class="segmented-control">
+            <button class="segmented-btn active" data-view="polar">🧭 1. 极坐标主图</button>
+            <button class="segmented-btn" data-view="cartesian">📈 2. 直角展开</button>
+            <button class="segmented-btn" data-view="baseline">📉 3. 原始与基线</button>
+            <button class="segmented-btn" data-view="unified">◫ 4. 同图融合</button>
+            <button class="segmented-btn" data-view="residual">📊 5. 拟合残差</button>
+            <button class="segmented-btn" data-view="dual">◫ 6. 双联对照</button>
+          </div>
+          <div style="font-size:0.72rem;color:var(--text-muted);">
+            ✨ 滚轮缩放、图例点击联动显隐、悬停查看逐点数据
+          </div>
+        </div>
+
+        <!-- 图表视口 -->
+        <div id="chartViewport" class="chart-viewport">
+          <!-- 1. 极坐标卡片 (默认优先呈现) -->
+          <div id="polarChartCard" class="chart-card">
+            <div id="polarChart" class="chart-canvas"></div>
+          </div>
+          <!-- 2. 直角坐标卡片 -->
+          <div id="cartesianChartCard" class="chart-card" style="display: none;">
+            <div id="cartesianChart" class="chart-canvas"></div>
+          </div>
+          <!-- 3. X-Y 背景基线卡片 -->
+          <div id="baselineChartCard" class="chart-card" style="display: none;">
+            <div id="baselinePreviewChart" class="chart-canvas"></div>
+          </div>
+          <!-- 4. 极坐标+直角坐标同图融合卡片 (Unified Single Canvas) -->
+          <div id="unifiedChartCard" class="chart-card" style="display: none;">
+            <div id="unifiedComboChart" class="chart-canvas"></div>
+          </div>
+          <!-- 5. 残差柱图卡片 -->
+          <div id="residualChartCard" class="chart-card" style="display: none;">
+            <div id="residualChart" class="chart-canvas"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 引入模块化脚本体系 -->
+  <script src="echarts.min.js"></script>
+  <script src="js/core/presets-data.js"></script>
+  <script src="js/core/parser.js"></script>
+  <script src="js/core/data-quality.js"></script>
+  <script src="js/core/state-store.js"></script>
+  <script src="js/algorithms/baseline-engine.js"></script>
+  <script src="js/algorithms/filter-engine.js"></script>
+  <script src="js/algorithms/malus-fitter.js"></script>
+  <script src="js/ui/chart-manager.js"></script>
+  <script src="js/ui/table-grid.js"></script>
+  <script src="js/ui/report-engine.js"></script>
+  <script src="js/extension/extension-bridge.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

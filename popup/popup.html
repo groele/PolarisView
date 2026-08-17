@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>偏振工作台快捷面板</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- 头部 -->
+    <header class="popup-header">
+      <div class="popup-brand">
+        <div class="popup-logo">⨀</div>
+        <div>
+          <h2 class="popup-title">1/2波片偏振工作台</h2>
+          <div class="popup-version">PLO Polar Studio v2.0</div>
+        </div>
+      </div>
+    </header>
+
+    <!-- 快速物理指标预览卡片 -->
+    <div class="quick-status-card">
+      <div class="status-header">
+        <span class="status-dot"></span>
+        <span id="quickDatasetName">当前数据: Pol.txt (实测)</span>
+      </div>
+      <div class="status-metrics">
+        <div class="metric-item">
+          <span class="metric-label">消光比 (ER)</span>
+          <span id="popupER" class="metric-val">999.00</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">拟合度 R²</span>
+          <span id="popupR2" class="metric-val">99.59%</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">快轴偏角 θ₀</span>
+          <span id="popupTheta" class="metric-val">13.12°</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 快捷操作区 -->
+    <div class="quick-actions">
+      <button id="btnOpenFullDashboard" class="action-btn action-primary">
+        <span>🖥️ 打开全屏科研工作台</span>
+      </button>
+      <button id="btnOpenSidePanel" class="action-btn action-secondary">
+        <span>📑 打开浏览器侧边停靠栏</span>
+      </button>
+      <button id="btnPasteFromClipboard" class="action-btn action-outline">
+        <span>📋 从剪贴板一键快速解析</span>
+      </button>
+    </div>
+
+    <!-- 底部状态 -->
+    <footer class="popup-footer">
+      <span>已就绪 • 支持极坐标/直角坐标/基线扣除/马吕斯拟合</span>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
