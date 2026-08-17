@@ -485,9 +485,25 @@ class ReportEngine {
       background: #1d4ed8;
       box-shadow: 0 6px 16px rgba(37,99,235,0.4);
     }
+    .btn-export-html {
+      position: fixed;
+      top: 70px;
+      right: 24px;
+      padding: 8px 16px;
+      background: #ffffff;
+      color: #1d4ed8;
+      border: 1px solid #93c5fd;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      box-shadow: 0 2px 7px rgba(15, 23, 42, 0.1);
+      z-index: 100;
+    }
+    .btn-export-html:hover { background: #eff6ff; border-color: #2563eb; }
     .btn-print:disabled { opacity: 0.72; cursor: wait; }
     @media print {
-      .btn-print { display: none; }
+      .btn-print, .btn-export-html { display: none; }
       body { padding: 0; max-width: 100%; }
       .polar-figure-card { box-shadow: none; border-color: #cbd5e1; }
     }
@@ -496,6 +512,7 @@ class ReportEngine {
 </head>
 <body>
   <button id="btnPrintPdf" class="btn-print" type="button">打印 / 导出为 PDF</button>
+  <button id="btnExportHtml" class="btn-export-html" type="button">导出 HTML</button>
 
   <div class="report-header">
     <h1 class="report-title">1/2波片旋转测量偏振特性学术分析报告</h1>
@@ -623,6 +640,26 @@ class ReportEngine {
         }
       });
       reportWin.addEventListener('afterprint', resetPrintButton);
+    }
+
+    const htmlButton = reportWin.document.getElementById('btnExportHtml');
+    if (htmlButton) {
+      htmlButton.addEventListener('click', () => {
+        // Standalone export intentionally omits live controls whose listeners
+        // belong to the extension page, leaving a clean shareable report.
+        const standaloneHtml = reportHtml
+          .replace('  <button id="btnPrintPdf" class="btn-print" type="button">打印 / 导出为 PDF</button>', '')
+          .replace('  <button id="btnExportHtml" class="btn-export-html" type="button">导出 HTML</button>', '');
+        const blob = new Blob([standaloneHtml], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = reportWin.document.createElement('a');
+        link.href = url;
+        link.download = `polarization_analysis_report_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.html`;
+        reportWin.document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+      });
     }
   }
 }
