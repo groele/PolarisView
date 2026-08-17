@@ -31,7 +31,7 @@ class TableGrid {
         </div>
         <div style="display:flex;gap:0.3rem;">
           <button id="btnGridAddRow" class="btn btn-secondary btn-sm" title="在末尾新增一行">+ 增行</button>
-          <button id="btnGridNormalize" class="btn btn-secondary btn-sm" title="一键将光强归一化到 [0, 1]">⚡ 归一化</button>
+          <button id="btnGridNormalize" class="btn btn-secondary btn-sm" title="一键将光强归一化到 [0, 1]"><svg class="table-action-icon"><use href="#i-modulation"/></svg>归一化</button>
           <button id="btnGridClear" class="btn btn-secondary btn-sm" title="清空全部数据">清空</button>
         </div>
       </div>
@@ -100,7 +100,7 @@ class TableGrid {
         <td style="color:var(--text-muted);">${angleVal}°</td>
         <td>
           <input type="number" class="grid-cell-input" data-field="y" data-idx="${idx}" value="${p.y}">
-          ${isOutlier ? '<span title="马吕斯拟合异常离群点 (>2.5σ)" style="color:#ef4444;font-size:0.65rem;cursor:help;">⚠️</span>' : ''}
+          ${isOutlier ? '<svg class="table-warning-icon" title="马吕斯拟合异常离群点 (>2.5σ)"><use href="#i-warning"/></svg>' : ''}
         </td>
         <td style="color:var(--text-muted);">${baseVal}</td>
         <td style="color:#10b981;font-weight:600;">${subVal}</td>

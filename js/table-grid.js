@@ -28,7 +28,7 @@ class TableGrid {
         <div class="btn-group">
           <button id="tblAddRowBtn" class="btn btn-secondary btn-sm" title="在底部添加一行">➕ 加行</button>
           <button id="tblNormalizeBtn" class="btn btn-secondary btn-sm" title="一键归一化到 [0, 1]">📐 归一化</button>
-          <button id="tblClearBtn" class="btn btn-secondary btn-sm" title="清空全部表格数据">🗑️ 清空</button>
+          <button id="tblClearBtn" class="btn btn-secondary btn-sm" title="清空全部表格数据"><svg class="table-action-icon"><use href="#i-clear"/></svg>清空</button>
         </div>
         <div style="font-size:0.75rem;color:var(--text-muted);">
           共 <b id="tblRowCount" style="color:var(--primary);font-family:var(--font-mono);">0</b> 行
@@ -157,7 +157,7 @@ class TableGrid {
       html += `
         <tr data-index="${i}" style="${isOutlier ? 'background:rgba(239, 68, 68, 0.1);' : ''}">
           <td style="color:var(--text-muted);">
-            ${isOutlier ? '⚠️' : ''}${i + 1}
+            ${isOutlier ? '<svg class="table-warning-icon"><use href="#i-warning"/></svg>' : ''}${i + 1}
           </td>
           <td>
             <input type="number" class="grid-cell-input input-x" data-index="${i}" value="${pt.rawX}">

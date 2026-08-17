@@ -45,11 +45,11 @@ The app provides constant-offset, AsLS, airPLS, SNIP, rubberband, polynomial, li
 |---|---|
 | PNG / SVG | Publication-ready image of the current view |
 | CSV | Raw, baseline, unclamped/displayed net values, and statistics |
-| Excel (`.xlsx`) | `Polar_Preview`, `OriginPro_Data`, `Raw_Preprocessing`, and `Processing_Notes` worksheets |
+| Excel (`.xlsx`) | `OriginPro_Data`, `Raw_Preprocessing`, and `Processing_Notes` data/provenance worksheets, with no embedded charts |
 | HTML | A self-contained offline report with embedded images, tables, and processing records |
 | PDF | Print the report page and select “Save as PDF” in the system dialog |
 
-In `OriginPro_Data`, column A is angle, B–D are repeated scans, and E–H are mean and error statistics. `Polar_Preview` contains a native Excel XY polar-coordinate plot: `X = I cos(θ)` and `Y = I sin(θ)`. Helper X/Y columns are preserved but hidden by default.
+In `OriginPro_Data`, column A is angle, B–D are repeated scans, and E–H are mean and error statistics. The workbook intentionally contains no polar or other Excel charts, keeping data inspection and subsequent OriginPro plotting clean.
 
 ## Installation and quick start
 

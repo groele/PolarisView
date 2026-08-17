@@ -45,11 +45,11 @@ PolarisView 面向旋转半波片—检偏器强度扫描等偏振光学实验�
 |---|---|
 | PNG / SVG | 当前图形的出版级图像 |
 | CSV | 原始、基线、未截断/显示净值与统计数据 |
-| Excel (`.xlsx`) | `Polar_Preview`、`OriginPro_Data`、`Raw_Preprocessing`、`Processing_Notes` 四个工作表 |
+| Excel (`.xlsx`) | `OriginPro_Data`、`Raw_Preprocessing`、`Processing_Notes` 三个数据与溯源工作表，不内嵌绘图 |
 | HTML | 内嵌图像、表格和处理记录的独立离线报告 |
 | PDF | 在报告页打开系统打印窗口后选择“另存为 PDF” |
 
-`OriginPro_Data` 的 A 列为角度，B–D 为三条重复扫描，E–H 为均值与误差统计，可直接作为 OriginPro 作图数据源。Excel 的 `Polar_Preview` 采用原生 XY 图：`X = I cos(θ)`、`Y = I sin(θ)`；辅助 X/Y 列默认隐藏但可取消隐藏。
+`OriginPro_Data` 的 A 列为角度，B–D 为三条重复扫描，E–H 为均值与误差统计，可直接作为 OriginPro 作图数据源。工作簿不再内嵌极坐标或其他 Excel 图表，避免影响数据浏览与后续 OriginPro 绘图。
 
 ## 安装与使用
 

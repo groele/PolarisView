@@ -311,7 +311,9 @@ class PolarizationApp {
         const isDark = document.body.getAttribute('data-theme') === 'dark';
         const newTheme = isDark ? 'light' : 'dark';
         document.body.setAttribute('data-theme', newTheme);
-        themeToggle.innerHTML = newTheme === 'dark' ? '☀️ 亮色模式' : '🌙 暗色模式';
+        themeToggle.innerHTML = newTheme === 'dark'
+          ? '<svg class="ui-icon" aria-hidden="true"><use href="#i-sun"/></svg>亮色模式'
+          : '<svg class="ui-icon" aria-hidden="true"><use href="#i-moon"/></svg>暗色模式';
         this.chartManager.setJournalTheme(newTheme === 'dark' ? 'dark_lab' : 'nature');
       });
     }

@@ -7,11 +7,17 @@
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
+  <svg class="popup-icon-sprite" aria-hidden="true">
+    <symbol id="p-polar" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17M3.5 12h17" opacity=".4"/><path d="M12 12c0-5.3 3-7 4.2-5.1 1.1 1.9-1.3 3.7-4.2 5.1 2.9 1.4 5.3 3.2 4.2 5.1-1.2 1.9-4.2.2-4.2-5.1Z"/></symbol>
+    <symbol id="p-workspace" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 13h8M8 16h5"/></symbol>
+    <symbol id="p-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M12 9h5M12 13h5M12 17h3"/></symbol>
+    <symbol id="p-paste" viewBox="0 0 24 24"><path d="M8 5h8v15H5V8h3zM9 4h6v3H9z"/><path d="m9 14 2 2 4-4"/></symbol>
+  </svg>
   <div class="popup-container">
     <!-- 头部 -->
     <header class="popup-header">
       <div class="popup-brand">
-        <div class="popup-logo">⨀</div>
+        <div class="popup-logo"><svg class="popup-brand-icon"><use href="#p-polar"/></svg></div>
         <div>
           <h2 class="popup-title">1/2波片偏振工作台</h2>
           <div class="popup-version">PLO Polar Studio v2.0</div>
@@ -23,20 +29,20 @@
     <div class="quick-status-card">
       <div class="status-header">
         <span class="status-dot"></span>
-        <span id="quickDatasetName">当前数据: Pol.txt (实测)</span>
+        <span id="quickDatasetName">当前数据: 未导入</span>
       </div>
       <div class="status-metrics">
         <div class="metric-item">
           <span class="metric-label">消光比 (ER)</span>
-          <span id="popupER" class="metric-val">999.00</span>
+          <span id="popupER" class="metric-val">—</span>
         </div>
         <div class="metric-item">
           <span class="metric-label">拟合度 R²</span>
-          <span id="popupR2" class="metric-val">99.59%</span>
+          <span id="popupR2" class="metric-val">—</span>
         </div>
         <div class="metric-item">
           <span class="metric-label">快轴偏角 θ₀</span>
-          <span id="popupTheta" class="metric-val">13.12°</span>
+          <span id="popupTheta" class="metric-val">—</span>
         </div>
       </div>
     </div>
@@ -44,13 +50,13 @@
     <!-- 快捷操作区 -->
     <div class="quick-actions">
       <button id="btnOpenFullDashboard" class="action-btn action-primary">
-        <span>🖥️ 打开全屏科研工作台</span>
+        <span><svg class="popup-action-icon"><use href="#p-workspace"/></svg>打开全屏科研工作台</span>
       </button>
       <button id="btnOpenSidePanel" class="action-btn action-secondary">
-        <span>📑 打开浏览器侧边停靠栏</span>
+        <span><svg class="popup-action-icon"><use href="#p-panel"/></svg>打开浏览器侧边停靠栏</span>
       </button>
       <button id="btnPasteFromClipboard" class="action-btn action-outline">
-        <span>📋 从剪贴板一键快速解析</span>
+        <span><svg class="popup-action-icon"><use href="#p-paste"/></svg>从剪贴板一键快速解析</span>
       </button>
     </div>
 
