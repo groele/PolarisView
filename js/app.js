@@ -347,6 +347,7 @@ class PolarizationApp {
     const btnExportPng = document.getElementById('btnExportPng');
     const btnExportSvg = document.getElementById('btnExportSvg');
     const btnExportCsv = document.getElementById('btnExportCsv');
+    const btnExportXlsx = document.getElementById('btnExportXlsx');
 
     if (btnExportPng) {
       btnExportPng.addEventListener('click', () => {
@@ -361,6 +362,7 @@ class PolarizationApp {
     }
 
     if (btnExportCsv) btnExportCsv.addEventListener('click', () => this.exportCsv());
+    if (btnExportXlsx) btnExportXlsx.addEventListener('click', () => this.exportXlsx());
 
     // 重置数据
     const btnResetData = document.getElementById('btnResetData');
@@ -772,6 +774,12 @@ class PolarizationApp {
     link.download = 'polarization_comprehensive_analysis.csv';
     link.click();
     URL.revokeObjectURL(url);
+  }
+
+  exportXlsx() {
+    if (!this.parsedState || !XlsxExporter.exportPolarization(this.parsedState)) {
+      alert('暂无有效数据可导出为 Excel。');
+    }
   }
 }
 
