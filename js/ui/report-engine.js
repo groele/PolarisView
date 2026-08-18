@@ -26,7 +26,8 @@ class ReportEngine {
         height: 600
       });
 
-      const { groups, stats, fitResult } = appState;
+      const { groups, activeGroups, stats, fitResult } = appState;
+      const reportGroups = Array.isArray(activeGroups) && activeGroups.length ? activeGroups : groups;
       const { stepStats } = stats;
 
       const palette = {
@@ -91,7 +92,7 @@ class ReportEngine {
       legendData.push('标准差误差带 (±1σ)');
 
       // 2. 三组曲线
-      groups.forEach((g, gIdx) => {
+      reportGroups.forEach((g, gIdx) => {
         const linePts = g.points.map(p => [p.y, p.relAngle]);
         if (linePts.length > 0) linePts.push([linePts[0][0], 360]);
         const gColors = [palette.g1, palette.g2, palette.g3];
@@ -103,7 +104,7 @@ class ReportEngine {
           symbol: 'circle',
           symbolSize: 6,
           showSymbol: true,
-          itemStyle: { color: gColors[gIdx] },
+          itemStyle: { color: gColors[Number.isFinite(g.groupIndex) ? g.groupIndex : gIdx] },
           lineStyle: { width: 1.5, type: 'dashed', opacity: 0.75 },
           data: linePts,
           z: 3
@@ -243,7 +244,8 @@ class ReportEngine {
         height: 420
       });
 
-      const { groups, stats, fitResult } = appState;
+      const { groups, activeGroups, stats, fitResult } = appState;
+      const reportGroups = Array.isArray(activeGroups) && activeGroups.length ? activeGroups : groups;
       const { stepStats } = stats;
 
       const angles = stepStats.map(s => `${s.relAngle}°`);
@@ -251,7 +253,7 @@ class ReportEngine {
       const series = [];
       const legendList = [];
 
-      groups.forEach((g, idx) => {
+      reportGroups.forEach((g, idx) => {
         legendList.push(g.name);
         series.push({
           name: g.name,
@@ -260,7 +262,7 @@ class ReportEngine {
           symbol: 'circle',
           symbolSize: 5,
           lineStyle: { width: 1.5, type: 'dashed', opacity: 0.8 },
-          itemStyle: { color: [palette.g1, palette.g2, palette.g3][idx] }
+          itemStyle: { color: [palette.g1, palette.g2, palette.g3][Number.isFinite(g.groupIndex) ? g.groupIndex : idx] }
         });
       });
 
@@ -603,6 +605,7 @@ class ReportEngine {
   <p style="font-size:13px;line-height:1.75;color:#334155;background:#f8fafc;padding:14px;border-radius:6px;border:1px solid #e2e8f0;">
     <b>结论状态：</b>${qualityAudit?.claimLevel || 'unknown'}。${DataQuality.format(qualityAudit)}<br>
     <b>处理记录：</b>${provenance?.processedAt || '-'}；基线=${provenance?.baseline?.algorithm || '-'}；参数=${JSON.stringify(provenance?.baseline?.options || {})}；负值截断=${provenance?.baseline?.clampZero ? '开启' : '关闭'}；相位对齐=${provenance?.phaseAlignment || '关闭'}。<br>
+    <b>参与分析的数据组：</b>${(qualityAudit?.analysisGroups || []).join('、') || '无'}；<b>已排除的数据组：</b>${(qualityAudit?.excludedGroups || []).join('、') || '无'}。均值、误差、平滑和拟合仅使用参与分析的数据组。<br>
     <b>解释限制：</b>DoLP、消光比和拟合参数均是此处理配置下的派生结果。自动相位对齐只用于展示；若启用负值截断，相关指标可能偏高。仅凭该强度扫描与经验谐波模型，不能将二/四阶谐波比作为独立的波片延迟标定；需结合已知输入偏振、检偏器零位、暗场/空白和独立校准测量。
   </p>
 

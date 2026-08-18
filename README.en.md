@@ -46,7 +46,7 @@ The app provides constant-offset, AsLS, airPLS, SNIP, rubberband, polynomial, li
 |---|---|
 | PNG / SVG | Publication-ready image of the current view |
 | CSV | Raw, baseline, unclamped/displayed net values, and statistics |
-| Excel (`.xlsx`) | `OriginPro_Data`, `Raw_Preprocessing`, and `Processing_Notes` data/provenance worksheets, with no embedded charts |
+| Excel (`.xlsx`) | `OriginPro_Data`, `Raw_Preprocessing`, and `Processing_Notes` data/provenance worksheets, including analysed/excluded groups and no embedded charts |
 | HTML | A self-contained offline report with embedded images, tables, and processing records |
 | PDF | Print the report page and select “Save as PDF” in the system dialog |
 

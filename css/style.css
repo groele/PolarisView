@@ -21,6 +21,9 @@
 .hint-icon { width: 0.82rem; height: 0.82rem; color: var(--primary-600); }
 .table-action-icon, .table-warning-icon { width: 0.78rem; height: 0.78rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; vertical-align: -0.13rem; }
 .table-warning-icon { color: var(--danger); margin-left: 0.18rem; cursor: help; }
+.analysis-participation { display: flex; align-items: center; justify-content: space-between; gap: 0.45rem; margin-top: 0.55rem; padding-top: 0.48rem; border-top: 1px solid var(--border-subtle); }
+.analysis-participation-copy { min-width: 0; display: inline-flex; align-items: center; gap: 0.3rem; color: var(--text-muted); font-size: 0.68rem; line-height: 1.35; }
+.analysis-participation-icon { width: 0.82rem; height: 0.82rem; flex: 0 0 auto; fill: none; stroke: var(--primary-600); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 /* 辅助与微调样式 */
 .input-mode-switcher {

@@ -378,6 +378,11 @@ class PolarizationApp {
     if (btnResetData) {
       btnResetData.addEventListener('click', () => this.loadPreset('real_pol'));
     }
+
+    const btnRestoreAnalysisGroups = document.getElementById('btnRestoreAnalysisGroups');
+    if (btnRestoreAnalysisGroups) {
+      btnRestoreAnalysisGroups.addEventListener('click', () => this.restoreAllAnalysisGroups());
+    }
   }
 
   loadPreset(presetKey) {
@@ -586,6 +591,7 @@ class PolarizationApp {
       qualityAudit.analysisGroups = activeGroups.map(g => g.name);
       qualityAudit.excludedGroups = excludedGroups.map(g => g.name);
       this.updateQualityAudit(qualityAudit);
+      this.updateAnalysisParticipation(activeGroups, excludedGroups);
 
       this.parsedState = {
         allPoints: processedPoints,
@@ -688,6 +694,20 @@ class PolarizationApp {
     badge.textContent = style[0]; badge.style.background = style[1]; badge.style.color = style[2];
   }
 
+  updateAnalysisParticipation(activeGroups = [], excludedGroups = []) {
+    const output = document.getElementById('analysisParticipation');
+    if (!output) return;
+    const active = activeGroups.length ? activeGroups.map(g => g.name).join('、') : '无';
+    const excluded = excludedGroups.length ? `；已排除：${excludedGroups.map(g => g.name).join('、')}` : '';
+    output.textContent = `参与分析：${active}${excluded}`;
+  }
+
+  restoreAllAnalysisGroups() {
+    this.analysisGroupVisibility = { group1: true, group2: true, group3: true };
+    this.chartManager.setGroupVisibility(this.analysisGroupVisibility);
+    this.processAndRender();
+  }
+
   updateStatsCards(summary, fitResult, baselineResult = null) {
     if (!summary) return;
 
@@ -777,6 +797,7 @@ class PolarizationApp {
     csv += `# 原始数据点: ${audit.pointCount || 0}; 角度覆盖: ${audit.angleSpan || 0} deg; 重复x: ${audit.duplicateX || 0}\n`;
     csv += `# 基线: ${provenance.baseline?.algorithm || '-'}; 参数: ${JSON.stringify(provenance.baseline?.options || {})}; 负值截断: ${provenance.baseline?.clampZero ? 'on' : 'off'}\n`;
     csv += `# 相位处理: ${provenance.phaseAlignment || 'off'}\n`;
+    csv += `# 参与分析组: ${(audit.analysisGroups || []).join(' | ') || 'none'}; 已排除组: ${(audit.excludedGroups || []).join(' | ') || 'none'}\n`;
     csv += `# 结论状态: ${audit.claimLevel || 'unknown'}; 警示: ${(audit.issues || []).map(x => x.text).join(' | ') || 'none'}\n`;
     csv += `# 线偏振度 DoLP: ${p.dolpPercent || summary.dolpEmpiricalPercent}%\n`;
     csv += `# 消光比 ER: ${summary.extinctionRatio} (${summary.extinctionRatioDB} dB)\n`;
@@ -793,7 +814,7 @@ class PolarizationApp {
     csv += '相对角度(deg),Group1,Group2,Group3,均值(Mean),标准差(SD),标准误(SE),相对标准差(RSD%)\n';
     stepStats.forEach(s => {
       const v = s.values;
-      csv += `${s.relAngle},${v[0] || ''},${v[1] || ''},${v[2] || ''},${s.mean},${s.sd},${s.se},${s.rsd}\n`;
+      csv += `${s.relAngle},${v[0] ?? ''},${v[1] ?? ''},${v[2] ?? ''},${s.mean},${s.sd},${s.se},${s.rsd}\n`;
     });
 
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });

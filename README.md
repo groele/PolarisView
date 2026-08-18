@@ -46,7 +46,7 @@ PolarisView 面向旋转半波片—检偏器强度扫描等偏振光学实验�
 |---|---|
 | PNG / SVG | 当前图形的出版级图像 |
 | CSV | 原始、基线、未截断/显示净值与统计数据 |
-| Excel (`.xlsx`) | `OriginPro_Data`、`Raw_Preprocessing`、`Processing_Notes` 三个数据与溯源工作表，不内嵌绘图 |
+| Excel (`.xlsx`) | `OriginPro_Data`、`Raw_Preprocessing`、`Processing_Notes` 三个数据与溯源工作表；明确记录参与分析与排除的数据组，不内嵌绘图 |
 | HTML | 内嵌图像、表格和处理记录的独立离线报告 |
 | PDF | 在报告页打开系统打印窗口后选择“另存为 PDF” |
 
