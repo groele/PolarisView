@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PolarisView | 偏振数据分析</title>
-  <meta name="description" content="专业级光学偏振与半波片旋转测量数据极坐标可视化、马吕斯理论拟合、物理参数反演、透明预处理8大多算法背景扣除、DoLP线偏振度解算与学术报告生成系统">
+  <meta name="description" content="透明、可复现的光学偏振与半波片旋转测量数据预览、预处理、独立周期统计、条件性调制度评估与质量门控报告平台">
   <link rel="stylesheet" href="css/style.css">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 </head>
@@ -41,15 +41,15 @@
         <div class="logo-icon"><svg class="brand-icon"><use href="#i-polar"/></svg></div>
         <div>
           <h1 class="brand-title">1/2波片旋转测量偏振分析工作台</h1>
-          <div class="brand-subtitle">Half-Wave Plate Polarization, Transparent Preprocessing & DoLP Studio</div>
+          <div class="brand-subtitle">Half-Wave Plate Polarization · Transparent & Reproducible Analysis</div>
         </div>
       </div>
       <div class="header-actions">
-        <button id="btnGenerateReport" class="btn btn-primary btn-sm" title="一键生成学术级实验分析报告与 PDF 打印"><svg class="ui-icon"><use href="#i-report"/></svg>实验报告</button>
-        <button id="btnExportPng" class="btn btn-primary btn-sm" title="导出 300DPI 超清论文插图 (自动适配当前单图/同图/双联模式)"><svg class="ui-icon"><use href="#i-image"/></svg>导出 4K 图</button>
-        <button id="btnExportSvg" class="btn btn-secondary btn-sm" title="导出矢量图 SVG"><svg class="ui-icon"><use href="#i-vector"/></svg>SVG</button>
-        <button id="btnExportCsv" class="btn btn-secondary btn-sm" title="导出三组数据、基线与统计结果为 CSV"><svg class="ui-icon"><use href="#i-table"/></svg>CSV</button>
-        <button id="btnExportXlsx" class="btn btn-secondary btn-sm" title="导出无内嵌绘图的 OriginPro 数据工作簿"><svg class="ui-icon"><use href="#i-sheet"/></svg>Excel</button>
+        <button id="btnGenerateReport" class="btn btn-primary btn-sm" title="生成带质量状态与处理记录的实验报告" disabled><svg class="ui-icon"><use href="#i-report"/></svg>实验报告</button>
+        <button id="btnExportPng" class="btn btn-primary btn-sm" title="导出 300DPI 超清论文插图" disabled><svg class="ui-icon"><use href="#i-image"/></svg>导出 4K 图</button>
+        <button id="btnExportSvg" class="btn btn-secondary btn-sm" title="导出矢量图 SVG" disabled><svg class="ui-icon"><use href="#i-vector"/></svg>SVG</button>
+        <button id="btnExportCsv" class="btn btn-secondary btn-sm" title="导出原始数据、处理结果、统计与溯源记录" disabled><svg class="ui-icon"><use href="#i-table"/></svg>CSV</button>
+        <button id="btnExportXlsx" class="btn btn-secondary btn-sm" title="导出无内嵌绘图的 OriginPro 数据工作簿" disabled><svg class="ui-icon"><use href="#i-sheet"/></svg>Excel</button>
         <button id="themeToggle" class="btn btn-secondary btn-sm" title="切换暗室荧光实验/明亮主题"><svg class="ui-icon"><use href="#i-moon"/></svg>暗色模式</button>
       </div>
     </header>
@@ -58,15 +58,15 @@
     <main class="app-body">
       <!-- 左侧控制面板 (流线化 3 大步骤) -->
       <aside class="sidebar">
-        <nav class="sidebar-tab-nav">
-          <button class="tab-btn active" data-tab="tabDataBaseline">1. 数据与预处理</button>
-          <button class="tab-btn" data-tab="tabFitVisual">2. 图形与理论拟合</button>
-          <button class="tab-btn" data-tab="tabStatsDetails">3. 物理指标与报表</button>
+        <nav class="sidebar-tab-nav" role="tablist" aria-label="分析步骤">
+          <button class="tab-btn active" role="tab" aria-selected="true" aria-controls="tabDataBaseline" data-tab="tabDataBaseline">1. 数据与预处理</button>
+          <button class="tab-btn" role="tab" aria-selected="false" aria-controls="tabFitVisual" data-tab="tabFitVisual">2. 图形与理论拟合</button>
+          <button class="tab-btn" role="tab" aria-selected="false" aria-controls="tabStatsDetails" data-tab="tabStatsDetails">3. 指标、溯源与报表</button>
         </nav>
 
         <div class="sidebar-content">
           <!-- Step 1: 数据录入与透明背景扣除 -->
-          <div id="tabDataBaseline" class="tab-pane">
+          <div id="tabDataBaseline" class="tab-pane" role="tabpanel">
             <div class="panel-section">
               <div class="section-header">
                 <span class="section-title"><svg class="section-icon"><use href="#i-table"/></svg>实验数据源</span>
@@ -102,7 +102,7 @@
                   <textarea id="rawDataInput" class="textarea-input" placeholder="0&#9;7119&#10;1&#9;7191..."></textarea>
                 </div>
                 <div class="form-group">
-                  <div id="dropZone" class="drop-zone">
+                  <div id="dropZone" class="drop-zone" role="button" tabindex="0" aria-label="选择或拖入 TXT CSV DAT 数据文件">
                     <svg class="drop-zone-icon"><use href="#i-import"/></svg>点击或拖拽数据文件 (.txt, .csv, 支持GBK/UTF-8)
                     <input type="file" id="fileInput" accept=".txt,.csv,.dat" style="display: none;">
                   </div>
@@ -126,8 +126,8 @@
               <div class="form-group">
                 <label class="form-label" for="baselineAlgo">预处理算法模型库</label>
                 <select id="baselineAlgo" class="select-input">
-                  <option value="none">不扣除背景 (保留原始测量值)</option>
-                  <option value="constant" selected>1. 恒定常数/暗电流扣除 (Constant / Min)</option>
+                  <option value="none" selected>0. 原始直通（推荐默认，不推断背景）</option>
+                  <option value="constant">1. 恒定常数/显示基准扣除 (Constant / Min)</option>
                   <option value="airpls">2. airPLS 自适应迭代重加权惩罚最小二乘（需参数敏感性验证）</option>
                   <option value="asls">3. AsLS 非对称重加权最小二乘 (Eilers-Boelens)</option>
                   <option value="snip">4. SNIP 敏感非线性迭代峰值剪切法 (核物理与光谱经典)</option>
@@ -139,7 +139,7 @@
               </div>
 
               <!-- 1. 恒定背景参数 -->
-              <div id="cfgConstant" class="algo-param-box">
+              <div id="cfgConstant" class="algo-param-box" style="display: none;">
                 <div class="form-group">
                   <label class="form-label" for="constMode">常数取值策略</label>
                   <select id="constMode" class="select-input">
@@ -243,7 +243,7 @@
 
               <div class="form-group" style="margin-top: 0.5rem;">
                 <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.76rem;cursor:pointer;">
-                  <input type="checkbox" id="clampZero" checked>
+                  <input type="checkbox" id="clampZero">
                   <span>截断负值归零 (净光强 y_sub ≥ 0)</span>
                 </label>
               </div>
@@ -254,10 +254,10 @@
                   <span><svg class="section-icon"><use href="#i-vector"/></svg>透明预处理：数学模型与实时方程</span>
                 </div>
                 <div id="mathEquationDisplay" class="math-equation-display">
-                  y_sub(x) = y(x) - 7033.0
+                  y_display(x) = y_raw(x)
                 </div>
                 <div id="mathDesc" class="math-desc">
-                  <b>模型原理</b>：提取探测器本底暗电流常数偏置 I_bg 并整体平移，将偏振消光极小值校准至零基准面。
+                  <b>安全默认</b>：原始直通不推断暗场或基线。只有在记录处理依据后，才建议启用背景模型；显示归零不等同于独立暗场测量。
                 </div>
 
                 <!-- 实时遥测指标 -->
@@ -289,10 +289,19 @@
               </div>
             </div>
 
-            <!-- 三组切片配置 (含智能相位锁定对齐) -->
+            <!-- 重复扫描与切片配置 -->
             <div class="panel-section" style="margin-top: 0.65rem;">
               <div class="section-header">
-                <span class="section-title"><svg class="section-icon"><use href="#i-vector"/></svg>三组数据区间切片 (Slicing)</span>
+                <span class="section-title"><svg class="section-icon"><use href="#i-vector"/></svg>重复扫描与周期分组</span>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="analysisMode">分析分组模式</label>
+                <select id="analysisMode" class="select-input">
+                  <option value="independent_cycles" selected>独立周期（推荐；每个源点只计一次）</option>
+                  <option value="legacy_sliding">滑动窗口对照（仅形状诊断）</option>
+                </select>
+                <div id="analysisModeHelp" class="field-help">按 360° 自动划分非重叠重复扫描；SD/SE 仅由独立周期计算。</div>
               </div>
 
               <div style="margin-bottom:0.5rem;">
@@ -302,7 +311,7 @@
                 </label>
               </div>
 
-              <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:0.35rem;">
+              <div id="legacyGroupRanges" style="display:none;grid-template-columns:repeat(3, 1fr);gap:0.35rem;">
                 <div class="form-group">
                   <label class="form-label" style="font-size:0.68rem;">Group 1 (x):</label>
                   <input type="number" id="g1Start" class="input-text" value="0" style="margin-bottom:2px;">
@@ -320,10 +329,27 @@
                 </div>
               </div>
             </div>
+
+            <details class="panel-section metadata-panel" style="margin-top:0.65rem;">
+              <summary><svg class="section-icon"><use href="#i-shield"/></svg>实验元数据与复现标识</summary>
+              <div class="metadata-grid">
+                <label>样品编号<input id="metaSampleId" class="input-text" type="text" placeholder="例如 ReS2-01"></label>
+                <label>仪器/探测器<input id="metaInstrument" class="input-text" type="text" placeholder="型号或编号"></label>
+                <label>激发波长 (nm)<input id="metaWavelength" class="input-text" type="number" min="0" step="0.1"></label>
+                <label>曝光时间 (ms)<input id="metaExposure" class="input-text" type="number" min="0" step="0.1"></label>
+                <label>增益<input id="metaGain" class="input-text" type="text"></label>
+                <label>操作者<input id="metaOperator" class="input-text" type="text"></label>
+              </div>
+              <label class="metadata-notes">实验备注<textarea id="metaNotes" class="textarea-input" rows="3" placeholder="暗场、空白、零位校准和其他实验条件"></textarea></label>
+              <div class="metadata-actions">
+                <button id="btnExportRecipe" class="btn btn-secondary btn-sm" type="button" disabled><svg class="ui-icon"><use href="#i-report"/></svg>导出分析配方 JSON</button>
+              </div>
+              <div id="sourceFingerprint" class="field-help">尚未导入数据。</div>
+            </details>
           </div>
 
           <!-- Step 2: 图形控制与马吕斯理论拟合 -->
-          <div id="tabFitVisual" class="tab-pane" style="display: none;">
+          <div id="tabFitVisual" class="tab-pane" role="tabpanel" style="display: none;">
             <div class="panel-section">
               <div class="section-header">
                 <span class="section-title"><svg class="section-icon"><use href="#i-image"/></svg>学术期刊视觉风格</span>
@@ -432,15 +458,15 @@
             </div>
           </div>
 
-          <!-- Step 3: 物理指标与报表明细 (含 DoLP 矩阵) -->
-          <div id="tabStatsDetails" class="tab-pane" style="display: none;">
+          <!-- Step 3: 条件性指标与报表明细 -->
+          <div id="tabStatsDetails" class="tab-pane" role="tabpanel" style="display: none;">
             <div class="panel-section">
               <div class="section-header">
-                <span class="section-title"><svg class="section-icon"><use href="#i-polar"/></svg>偏振光学与反演特征参数 (含 DoLP)</span>
+                <span class="section-title"><svg class="section-icon"><use href="#i-polar"/></svg>处理依赖指标与模型诊断</span>
               </div>
               <div class="stats-grid">
                 <div class="stat-card">
-                  <div class="stat-label">线偏振度 (DoLP)</div>
+                  <div class="stat-label">调制度代理（条件性 DoLP）</div>
                   <div id="statDolp" class="stat-value" style="color:#2563eb;">-</div>
                 </div>
                 <div class="stat-card">
@@ -464,7 +490,7 @@
                   <div id="fitRSquared" class="stat-value" style="color:#2563eb;">-</div>
                 </div>
                 <div class="stat-card">
-                  <div class="stat-label">波片延迟误差 Δδ</div>
+                  <div class="stat-label">模型依赖延迟诊断量</div>
                   <div id="fitRetardance" class="stat-value">-</div>
                 </div>
                 <div class="stat-card">
@@ -480,6 +506,7 @@
               </div>
               <div class="data-table-container">
                 <table class="data-table">
+                  <caption class="sr-only">独立周期逐角度统计数据</caption>
                   <thead>
                     <tr>
                       <th>角度</th>
@@ -507,63 +534,63 @@
           <div class="kpi-item">
             <svg class="kpi-icon"><use href="#i-polar"/></svg>
             <div class="kpi-info">
-              <span class="kpi-label">线偏振度 (DoLP)</span>
-              <span id="ribbonDolp" class="kpi-val kpi-highlight">98.81%</span>
+              <span class="kpi-label">调制度代理</span>
+              <span id="ribbonDolp" class="kpi-val kpi-highlight">—</span>
             </div>
           </div>
           <div class="kpi-item">
             <svg class="kpi-icon"><use href="#i-grid"/></svg>
             <div class="kpi-info">
               <span class="kpi-label">消光比 (ER)</span>
-              <span id="ribbonER" class="kpi-val kpi-highlight">83.16</span>
+              <span id="ribbonER" class="kpi-val kpi-highlight">—</span>
             </div>
           </div>
           <div class="kpi-item">
             <svg class="kpi-icon"><use href="#i-angle"/></svg>
             <div class="kpi-info">
               <span class="kpi-label">快轴偏角 θ₀</span>
-              <span id="ribbonTheta" class="kpi-val kpi-success">13.12°</span>
+              <span id="ribbonTheta" class="kpi-val kpi-success">—</span>
             </div>
           </div>
           <div class="kpi-item">
             <svg class="kpi-icon"><use href="#i-fit"/></svg>
             <div class="kpi-info">
               <span class="kpi-label">拟合优度 R²</span>
-              <span id="ribbonR2" class="kpi-val kpi-highlight">99.593%</span>
+              <span id="ribbonR2" class="kpi-val kpi-highlight">—</span>
             </div>
           </div>
           <div class="kpi-item">
             <svg class="kpi-icon"><use href="#i-wave"/></svg>
             <div class="kpi-info">
               <span class="kpi-label">底噪 I_bg (占比)</span>
-              <span id="ribbonBg" class="kpi-val">7033 (79.4%)</span>
+              <span id="ribbonBg" class="kpi-val">—</span>
             </div>
           </div>
           <div class="kpi-item">
             <svg class="kpi-icon"><use href="#i-modulation"/></svg>
             <div class="kpi-info">
               <span class="kpi-label">调制度 Depth</span>
-              <span id="ribbonModulation" class="kpi-val">97.62%</span>
+              <span id="ribbonModulation" class="kpi-val">—</span>
             </div>
           </div>
           <div class="kpi-item">
             <svg class="kpi-icon"><use href="#i-residual"/></svg>
             <div class="kpi-info">
               <span class="kpi-label">均方根 RMSE</span>
-              <span id="ribbonRmse" class="kpi-val">39.81</span>
+              <span id="ribbonRmse" class="kpi-val">—</span>
             </div>
           </div>
         </div>
 
         <!-- 顶部视图分段胶囊控制器 -->
         <div class="toolbar">
-          <div class="segmented-control">
-            <button class="segmented-btn active" data-view="polar"><svg class="segmented-icon"><use href="#i-polar"/></svg>1. 极坐标主图</button>
-            <button class="segmented-btn" data-view="cartesian"><svg class="segmented-icon"><use href="#i-fit"/></svg>2. 直角展开</button>
-            <button class="segmented-btn" data-view="baseline"><svg class="segmented-icon"><use href="#i-wave"/></svg>3. 原始与基线</button>
-            <button class="segmented-btn" data-view="unified"><svg class="segmented-icon"><use href="#i-combine"/></svg>4. 同图融合</button>
-            <button class="segmented-btn" data-view="residual"><svg class="segmented-icon"><use href="#i-residual"/></svg>5. 拟合残差</button>
-            <button class="segmented-btn" data-view="dual"><svg class="segmented-icon"><use href="#i-dual"/></svg>6. 双联对照</button>
+          <div class="segmented-control" role="group" aria-label="图表视图">
+            <button class="segmented-btn active" aria-pressed="true" data-view="polar"><svg class="segmented-icon"><use href="#i-polar"/></svg>1. 极坐标主图</button>
+            <button class="segmented-btn" aria-pressed="false" data-view="cartesian"><svg class="segmented-icon"><use href="#i-fit"/></svg>2. 直角展开</button>
+            <button class="segmented-btn" aria-pressed="false" data-view="baseline"><svg class="segmented-icon"><use href="#i-wave"/></svg>3. 原始与基线</button>
+            <button class="segmented-btn" aria-pressed="false" data-view="unified"><svg class="segmented-icon"><use href="#i-combine"/></svg>4. 同图融合</button>
+            <button class="segmented-btn" aria-pressed="false" data-view="residual"><svg class="segmented-icon"><use href="#i-residual"/></svg>5. 拟合残差</button>
+            <button class="segmented-btn" aria-pressed="false" data-view="dual"><svg class="segmented-icon"><use href="#i-dual"/></svg>6. 双联对照</button>
           </div>
           <div style="font-size:0.72rem;color:var(--text-muted);">
             <span class="toolbar-hint" title="隐藏数据组会同步排除均值、误差、平滑和马吕斯拟合；重新显示后立即参与计算。"><svg class="hint-icon"><use href="#i-vector"/></svg>图例显隐同步分析 · 悬停查看逐点数据</span>
@@ -572,6 +599,11 @@
 
         <!-- 图表视口 -->
         <div id="chartViewport" class="chart-viewport">
+          <div id="emptyWorkspaceState" class="empty-workspace-state" role="status" aria-live="polite">
+            <svg class="empty-state-icon"><use href="#i-import"/></svg>
+            <strong>导入实验数据后开始分析</strong>
+            <span>默认不推断背景、不显示示例指标；所有处理步骤都会记录在导出文件中。</span>
+          </div>
           <!-- 1. 极坐标卡片 (默认优先呈现) -->
           <div id="polarChartCard" class="chart-card">
             <div id="polarChart" class="chart-canvas"></div>

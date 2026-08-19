@@ -1,6 +1,6 @@
 /**
- * report-engine.js (UI Report Engine - Enhanced DoLP & Publication Quality)
- * 学术级光学实验分析报告自动生成器 (DoLP 线偏振度、Stokes 偏振态深度解算与出版级高清排版)
+ * report-engine.js (Transparent Scientific Report Engine)
+ * 科研实验分析报告生成器：质量门控、数据来源、处理配方、条件性指标与可复现信息
  */
 
 class ReportEngine {
@@ -360,6 +360,9 @@ class ReportEngine {
     const { stats, fitResult, qualityAudit, provenance } = appState;
     const { summary, stepStats } = stats;
     const p = fitResult ? fitResult.params : {};
+    const reportable = qualityAudit?.claimLevel !== 'blocked';
+    const metric = (value, suffix = '') => reportable && value !== undefined && value !== null && value !== '' ? `${value}${suffix}` : '不可报告';
+    const esc = value => this.escapeHtml(String(value ?? ''));
     const dateStr = new Date().toLocaleString();
 
     const [polarImgUrl, cartesianImgUrl] = await Promise.all([
@@ -377,7 +380,7 @@ class ReportEngine {
           <td>${st.values[2] !== undefined ? st.values[2] : '-'}</td>
           <td style="font-weight:bold;color:#b91c1c;">${st.mean}</td>
           <td>±${st.sd}</td>
-          <td>±${st.se}</td>
+          <td>${st.se === null ? 'N/A' : `±${st.se}`}</td>
           <td>${st.rsd}%</td>
         </tr>
       `;
@@ -505,6 +508,7 @@ class ReportEngine {
     }
     .btn-export-html:hover { background: #eff6ff; border-color: #2563eb; }
     .btn-print:disabled { opacity: 0.72; cursor: wait; }
+    .blocked-banner { margin: 0 0 20px; padding: 12px 16px; border: 2px solid #dc2626; color: #991b1b; background: #fef2f2; font-weight: 800; text-align: center; }
     @media print {
       .btn-print, .btn-export-html { display: none; }
       body { padding: 0; max-width: 100%; }
@@ -517,24 +521,26 @@ class ReportEngine {
   <button id="btnPrintPdf" class="btn-print" type="button">打印 / 导出为 PDF</button>
   <button id="btnExportHtml" class="btn-export-html" type="button">导出 HTML</button>
 
+  ${reportable ? '' : '<div class="blocked-banner">质量门已阻止科研结论：下列统计仅供诊断，不得作为可报告物理结果。</div>'}
+
   <div class="report-header">
     <h1 class="report-title">1/2波片旋转测量偏振特性学术分析报告</h1>
-    <div class="report-subtitle">Half-Wave Plate Polarization & Malus Inversion Report • 实验日期: ${dateStr}</div>
+    <div class="report-subtitle">Half-Wave Plate Polarization Diagnostic Report • ${provenance?.analysisId || 'Analysis ID pending'} • ${dateStr}</div>
   </div>
 
-  <div class="section-title">1. 核心光学偏振特征参数 (含 DoLP 线偏振度)</div>
+  <div class="section-title">1. 处理依赖指标与报告状态</div>
   <table class="metrics-table">
     <tr>
-      <th>线偏振度 (DoLP)</th>
-      <td><b style="color:#2563eb;font-size:16px;">${p.dolpPercent || summary.dolpEmpiricalPercent}%</b></td>
+      <th>调制度代理（条件性 DoLP）</th>
+      <td><b style="color:#2563eb;font-size:16px;">${metric(p.dolpPercent ?? summary.dolpEmpiricalPercent, '%')}</b></td>
       <th>消光比 (Extinction Ratio)</th>
-      <td><b style="color:#059669;font-size:16px;">${summary.extinctionRatio}</b> (${summary.extinctionRatioDB} dB)</td>
+      <td><b style="color:#059669;font-size:16px;">${metric(summary.extinctionRatio)}</b>${reportable ? ` (${summary.extinctionRatioDB} dB)` : ''}</td>
     </tr>
     <tr>
       <th>调制度 (Modulation Depth)</th>
-      <td><b>${summary.modulationPercent}%</b></td>
+      <td><b>${metric(summary.modulationPercent, '%')}</b></td>
       <th>平均相对标准差 (RSD)</th>
-      <td>${summary.avgRSD}%</td>
+      <td>${metric(summary.avgRSD, '%')}</td>
     </tr>
     <tr>
       <th>最大净光强 (峰值)</th>
@@ -544,25 +550,31 @@ class ReportEngine {
     </tr>
   </table>
 
-  <div class="section-title">2. 马吕斯定律理论拟合与波片参数反演结果</div>
+  <div class="section-title">2. 经验谐波拟合与稳定性诊断</div>
   <table class="metrics-table">
     <tr>
       <th>快轴初始偏角 θ₀</th>
-      <td><b style="color:#059669;font-size:15px;">${p.theta0 || '-'}°</b></td>
+      <td><b style="color:#059669;font-size:15px;">${metric(p.theta0, '°')}</b></td>
       <th>拟合优度 (R²)</th>
-      <td><b style="color:#2563eb;font-size:15px;">${p.rSquaredPercent || '-'}%</b></td>
+      <td><b style="color:#2563eb;font-size:15px;">${metric(p.rSquaredPercent, '%')}</b></td>
+    </tr>
+    <tr>
+      <th>θ₀ 的 95% 置信区间</th>
+      <td>${reportable && p.theta0CI95 ? `${p.theta0CI95[0]}° 至 ${p.theta0CI95[1]}°` : '不可报告'}</td>
+      <th>调制度代理的 95% 置信区间</th>
+      <td>${reportable && p.dolpCI95Percent ? `${p.dolpCI95Percent[0]}% 至 ${p.dolpCI95Percent[1]}%` : '不可报告'}</td>
     </tr>
     <tr>
       <th>二/四阶谐波诊断量</th>
-      <td>${p.retardanceError || '-'}°（模型依赖，非独立波片延迟标定）</td>
+      <td>${metric(p.retardanceError, '°')}（模型依赖，非独立波片延迟标定）</td>
       <th>均方根误差 (RMSE)</th>
-      <td>${p.rmse || '-'} Counts</td>
+      <td>${metric(p.rmse, ' Counts')}</td>
     </tr>
     <tr>
-      <th>理论调制幅度 I₀</th>
-      <td>${p.amplitude || '-'} Counts</td>
-      <th>谐波解算线偏度 DoLP</th>
-      <td><b>${p.dolpHarmonicPercent || '-'}%</b></td>
+      <th>自由度 / 条件数代理</th>
+      <td>${p.degreesOfFreedom ?? '-'} / ${p.conditionProxy ?? '-'}</td>
+      <th>谐波调制度代理</th>
+      <td><b>${metric(p.dolpHarmonicPercent, '%')}</b></td>
     </tr>
   </table>
 
@@ -582,7 +594,7 @@ class ReportEngine {
     </div>
   </div>
 
-  <div class="section-title">5. 三组切片对齐与逐点统计明细</div>
+  <div class="section-title">5. 重复周期与逐点统计明细</div>
   <table class="data-table">
     <thead>
       <tr>
@@ -603,8 +615,10 @@ class ReportEngine {
 
   <div class="section-title">6. 数据质量、处理可追溯性与结论边界</div>
   <p style="font-size:13px;line-height:1.75;color:#334155;background:#f8fafc;padding:14px;border-radius:6px;border:1px solid #e2e8f0;">
-    <b>结论状态：</b>${qualityAudit?.claimLevel || 'unknown'}。${DataQuality.format(qualityAudit)}<br>
-    <b>处理记录：</b>${provenance?.processedAt || '-'}；基线=${provenance?.baseline?.algorithm || '-'}；参数=${JSON.stringify(provenance?.baseline?.options || {})}；负值截断=${provenance?.baseline?.clampZero ? '开启' : '关闭'}；相位对齐=${provenance?.phaseAlignment || '关闭'}。<br>
+    <b>结论状态：</b>${esc(qualityAudit?.claimLevel || 'unknown')}。${esc(DataQuality.format(qualityAudit))}<br>
+    <b>处理记录：</b>${esc(provenance?.processedAt || '-')}；基线=${esc(provenance?.baseline?.algorithm || '-')}；参数=${esc(JSON.stringify(provenance?.baseline?.options || {}))}；负值截断=${provenance?.baseline?.clampZero ? '开启' : '关闭'}；相位对齐=${esc(provenance?.phaseAlignment || '关闭')}。<br>
+    <b>复现标识：</b>${esc(provenance?.analysisId || '-')}；源文件=${esc(provenance?.source?.fileName || provenance?.source?.sourceType || '-')}；SHA-256=${esc(provenance?.source?.sha256 || '-')}；解析接受/拒绝=${provenance?.parserDiagnostics?.acceptedLines || 0}/${provenance?.parserDiagnostics?.rejectedLines || 0}。<br>
+    <b>实验元数据：</b>${esc(JSON.stringify(provenance?.experiment || {}))}。<br>
     <b>参与分析的数据组：</b>${(qualityAudit?.analysisGroups || []).join('、') || '无'}；<b>已排除的数据组：</b>${(qualityAudit?.excludedGroups || []).join('、') || '无'}。均值、误差、平滑和拟合仅使用参与分析的数据组。<br>
     <b>解释限制：</b>DoLP、消光比和拟合参数均是此处理配置下的派生结果。自动相位对齐只用于展示；若启用负值截断，相关指标可能偏高。仅凭该强度扫描与经验谐波模型，不能将二/四阶谐波比作为独立的波片延迟标定；需结合已知输入偏振、检偏器零位、暗场/空白和独立校准测量。
   </p>
@@ -612,9 +626,9 @@ class ReportEngine {
   <div class="section-title">7. 偏振物理评述</div>
   <p style="font-size:13px;line-height:1.75;color:#334155;background:#f8fafc;padding:14px;border-radius:6px;border:1px solid #e2e8f0;">
     本次实验通过旋转 1/2 波片记录强度响应，并按当前切片规则计算重复测量统计量。
-    在当前经验谐波模型下，拟合 R² 为 <b>${p.rSquaredPercent || '-'}%</b>、RMSE 为 <b>${p.rmse || '-'} Counts</b>，主轴方向的模型估计为 <b>θ₀ = ${p.theta0 || '-'}°</b>；这些数值应与仪器零位和独立校准共同解释。
+    在当前经验谐波模型下，拟合 R² 为 <b>${metric(p.rSquaredPercent, '%')}</b>、RMSE 为 <b>${metric(p.rmse, ' Counts')}</b>，主轴方向的模型估计为 <b>θ₀ = ${metric(p.theta0, '°')}</b>；这些数值应与仪器零位和独立校准共同解释。
     <br><br>
-    <b>线偏振度 (DoLP) 分析</b>：在当前基线、切片和拟合配置下，派生 DoLP 为 <b>${p.dolpPercent || summary.dolpEmpiricalPercent}%</b>，消光比为 <b>${summary.extinctionRatio} (${summary.extinctionRatioDB} dB)</b>，调制度为 <b>${summary.modulationPercent}%</b>。这些结果描述数据与模型的一致程度，不单独证明偏振纯度、仪器精度或波片参数；应报告暗场、空白、零位与重复测量验证。
+    <b>调制度代理说明</b>：在当前基线、分组和拟合配置下，条件性 DoLP/调制度代理为 <b>${metric(p.dolpPercent ?? summary.dolpEmpiricalPercent, '%')}</b>，消光比为 <b>${reportable ? `${summary.extinctionRatio} (${summary.extinctionRatioDB} dB)` : '不可报告'}</b>。这些结果不单独证明偏振纯度、仪器精度或波片参数；应报告暗场、空白、零位与独立重复测量。
   </p>
 </body>
 </html>
@@ -665,6 +679,12 @@ class ReportEngine {
         setTimeout(() => URL.revokeObjectURL(url), 0);
       });
     }
+  }
+
+  static escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, character => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[character]);
   }
 }
 

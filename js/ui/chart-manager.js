@@ -59,6 +59,13 @@ class PolarChartManager {
     return inst;
   }
 
+  setChartAccessibility(domId, label) {
+    const dom = this.getDom(domId);
+    if (!dom) return;
+    dom.setAttribute('role', 'img');
+    dom.setAttribute('aria-label', label);
+  }
+
   getPalette() {
     const themes = {
       nature: {
@@ -129,7 +136,20 @@ class PolarChartManager {
 
   updateData(parsedData) {
     this.currentData = parsedData;
+    if (!parsedData?.stats) {
+      this.clearCharts();
+      return;
+    }
     this.render();
+  }
+
+  clearCharts() {
+    [this.polarDomId, this.cartesianDomId, this.baselineDomId, this.residualDomId, this.unifiedDomId].forEach(id => {
+      if (!id) return;
+      const dom = this.getDom(id);
+      const chart = dom && window.echarts ? echarts.getInstanceByDom(dom) : null;
+      if (chart && !chart.isDisposed()) chart.clear();
+    });
   }
 
   setDisplayMode(mode) {
@@ -209,6 +229,7 @@ class PolarChartManager {
     if (!this.currentData || !this.currentData.groups || !this.currentData.stats) return;
 
     const { groups, stats, rawBaselineResult, fitResult } = this.currentData;
+    const reportable = this.currentData.qualityAudit?.claimLevel !== 'blocked';
     const { stepStats, summary } = stats;
     const palette = this.getPalette();
 
@@ -229,9 +250,9 @@ class PolarChartManager {
 
     // 渲染各个可见图表
     this.renderBaselineChart(rawBaselineResult);
-    this.renderCartesian(stepStats, groups, smoothedMeanList, summary, fitResult, palette);
-    this.renderPolarOnly(stepStats, groups, smoothedMeanList, summary, fitResult, palette, rMin, rMax);
-    this.renderUnifiedComboChart(stepStats, groups, smoothedMeanList, summary, fitResult, palette, rMin, rMax);
+    this.renderCartesian(stepStats, groups, smoothedMeanList, summary, fitResult, palette, reportable);
+    this.renderPolarOnly(stepStats, groups, smoothedMeanList, summary, fitResult, palette, rMin, rMax, reportable);
+    this.renderUnifiedComboChart(stepStats, groups, smoothedMeanList, summary, fitResult, palette, rMin, rMax, reportable);
     if (fitResult) {
       this.renderResidualChart(fitResult);
     }
@@ -240,15 +261,16 @@ class PolarChartManager {
     this.resize();
   }
 
-  renderPolarOnly(stepStats, groups, smoothedMeanList, summary, fitResult, palette, rMin, rMax) {
+  renderPolarOnly(stepStats, groups, smoothedMeanList, summary, fitResult, palette, rMin, rMax, reportable = true) {
+    this.setChartAccessibility(this.polarDomId, reportable ? '极坐标偏振强度分布及拟合图，详细数值见指标与报表标签页' : '质量门阻止结论的极坐标数据诊断图');
     const chart = this.getChartInstance(this.polarDomId);
     if (!chart) return;
 
     const polarSeries = [];
     const legendData = [];
-    this.getDolpReferenceRings(summary, fitResult).forEach(ref => {
+    (reportable ? this.getDolpReferenceRings(summary, fitResult) : []).forEach(ref => {
       polarSeries.push({
-        name: `DoLP ${ref.label} reference`, type: 'line', coordinateSystem: 'polar',
+        name: `Indicator ${ref.label} reference`, type: 'line', coordinateSystem: 'polar',
         showSymbol: false, silent: true, data: Array.from({ length: 37 }, (_, i) => [ref.value, i * 10]),
         lineStyle: { color: '#94a3b8', width: 1, type: 'dashed', opacity: 0.5 }, z: 0
       });
@@ -260,7 +282,7 @@ class PolarChartManager {
       const lowerData = [];
 
       stepStats.forEach((s) => {
-        const err = this.errorType === 'sd' ? s.sd : s.se;
+        const err = Number.isFinite(this.errorType === 'sd' ? s.sd : s.se) ? (this.errorType === 'sd' ? s.sd : s.se) : 0;
         const up = s.mean + err;
         const low = Math.max(0, s.mean - err);
         upperData.push([up, s.relAngle]);
@@ -384,12 +406,14 @@ class PolarChartManager {
       });
     }
 
-    const dolpDisplay = fitResult ? fitResult.params.dolpPercent : summary.dolpEmpiricalPercent;
+    const dolpDisplay = reportable ? (fitResult ? fitResult.params.dolpPercent : summary.dolpEmpiricalPercent) : '不可报告';
 
     const polarOption = {
       title: {
         text: '1/2波片偏振极坐标空间分布图 (Polar Intensity Distribution)',
-        subtext: `DoLP: ${dolpDisplay}% | Imin/Imax 浅灰虚线参考环 | 消光比: ${summary.extinctionRatio} (${summary.extinctionRatioDB} dB) | 调制度: ${summary.modulationPercent}% | 主轴偏角 θ₀: ${fitResult ? fitResult.params.theta0 : '-'}° | 拟合 R²: ${fitResult ? fitResult.params.rSquaredPercent : '-'}%`,
+        subtext: reportable
+          ? `调制度代理: ${dolpDisplay}% | Imin/Imax 参考环 | 消光比: ${summary.extinctionRatio} (${summary.extinctionRatioDB} dB) | 主轴偏角 θ₀: ${fitResult ? fitResult.params.theta0 : '-'}° | 拟合 R²: ${fitResult ? fitResult.params.rSquaredPercent : '-'}%`
+          : '质量门已阻止物理指标输出；曲线仅供数据诊断',
         left: 'center',
         top: 6,
         textStyle: { fontSize: 13, fontWeight: '700' },
@@ -438,7 +462,8 @@ class PolarChartManager {
     this.bindLegendInteraction(chart, groups);
   }
 
-  renderCartesian(stepStats, groups, smoothedMeanList, summary, fitResult, palette) {
+  renderCartesian(stepStats, groups, smoothedMeanList, summary, fitResult, palette, reportable = true) {
+    this.setChartAccessibility(this.cartesianDomId, reportable ? '角度与光强直角坐标响应图，详细数值见指标与报表标签页' : '质量门阻止结论的直角坐标数据诊断图');
     const chart = this.getChartInstance(this.cartesianDomId);
     if (!chart) return;
 
@@ -504,12 +529,12 @@ class PolarChartManager {
       });
     }
 
-    const dolpDisplay = fitResult ? fitResult.params.dolpPercent : summary.dolpEmpiricalPercent;
+    const dolpDisplay = reportable ? (fitResult ? fitResult.params.dolpPercent : summary.dolpEmpiricalPercent) : '不可报告';
 
     const cartesianOption = {
       title: {
         text: '直角坐标角度-光强响应曲线 (Cartesian Plot)',
-        subtext: `DoLP: ${dolpDisplay}% | 消光比: ${summary.extinctionRatio} | 调制度: ${summary.modulationPercent}%`,
+        subtext: reportable ? `调制度代理: ${dolpDisplay}% | 消光比: ${summary.extinctionRatio} | 调制度: ${summary.modulationPercent}%` : '质量门已阻止物理指标输出；曲线仅供数据诊断',
         left: 'center',
         top: 8,
         textStyle: { fontSize: 13, fontWeight: '700' },
@@ -529,6 +554,7 @@ class PolarChartManager {
   }
 
   renderBaselineChart(baselineResult) {
+    this.setChartAccessibility(this.baselineDomId, '原始强度、估计基线和处理后强度对照图');
     if (!baselineResult) return;
     const chart = this.getChartInstance(this.baselineDomId);
     if (!chart) return;
@@ -589,6 +615,7 @@ class PolarChartManager {
   }
 
   renderResidualChart(fitResult) {
+    this.setChartAccessibility(this.residualDomId, '经验谐波拟合残差图');
     if (!fitResult) return;
     const chart = this.getChartInstance(this.residualDomId);
     if (!chart) return;
@@ -622,7 +649,7 @@ class PolarChartManager {
 
     const residualOption = {
       title: {
-        text: `马吕斯拟合残差分析 (Residual Plot) - RMSE: ${rmse} | 拟合优度 R²: ${fitResult.params.rSquaredPercent}% | DoLP: ${fitResult.params.dolpPercent}%`,
+        text: `经验谐波拟合残差 (Residual Plot) - RMSE: ${rmse} | R²: ${fitResult.params.rSquaredPercent}% | 调制度代理: ${fitResult.params.dolpPercent}%`,
         left: 'center',
         top: 6,
         textStyle: { fontSize: 13, fontWeight: '700' }
@@ -637,7 +664,8 @@ class PolarChartManager {
     chart.setOption(residualOption, true);
   }
 
-  renderUnifiedComboChart(stepStats, groups, smoothedMeanList, summary, fitResult, palette, rMin, rMax) {
+  renderUnifiedComboChart(stepStats, groups, smoothedMeanList, summary, fitResult, palette, rMin, rMax, reportable = true) {
+    this.setChartAccessibility(this.unifiedDomId, reportable ? '极坐标与直角坐标联合偏振响应图' : '质量门阻止结论的联合数据诊断图');
     const chart = this.getChartInstance(this.unifiedDomId);
     if (!chart) return;
 
@@ -839,19 +867,19 @@ class PolarChartManager {
       });
     }
 
-    const dolpDisplay = fitResult ? fitResult.params.dolpPercent : summary.dolpEmpiricalPercent;
+    const dolpDisplay = reportable ? (fitResult ? fitResult.params.dolpPercent : summary.dolpEmpiricalPercent) : '不可报告';
 
     const comboOption = {
       title: [
         {
-          text: `极坐标花样 (DoLP: ${dolpDisplay}%)`,
+          text: reportable ? `极坐标花样 (调制度代理: ${dolpDisplay}%)` : '极坐标花样（仅诊断）',
           left: '26%',
           top: 10,
           textAlign: 'center',
           textStyle: { fontSize: 12.5, fontWeight: '700' }
         },
         {
-          text: `直角坐标角度展开 (ER: ${summary.extinctionRatio})`,
+          text: reportable ? `直角坐标角度展开 (ER: ${summary.extinctionRatio})` : '直角坐标展开（不可报告）',
           left: '74%',
           top: 10,
           textAlign: 'center',

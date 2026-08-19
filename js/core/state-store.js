@@ -10,7 +10,7 @@ class StateStore {
       journalTheme: 'nature',
       currentDatasetName: '未导入数据',
       latestMetrics: null,
-      bgConfig: { algo: 'constant', clampZero: true },
+      bgConfig: { algo: 'none', clampZero: false },
       filterConfig: { type: 'gaussian', sigma: 1.2, enableSpline: true },
       fitConfig: { showFit: true, errorType: 'sd' }
     };

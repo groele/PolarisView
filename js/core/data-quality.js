@@ -30,6 +30,17 @@ class DataQuality {
     if (clamped) issues.push({ severity: 'warn', text: `已截断 ${clamped} 个负净值为零；消光比与 DoLP 可能被上调，仅作处理后指标。` });
     if (config.autoPhaseLock) issues.push({ severity: 'warn', text: '已启用自动相位锁定；该操作用于可视化对齐，不能替代机械零位校准或用于评估重复性。' });
     const sizes = (groups || []).map(g => g.points.length);
+    if (config.analysisMode === 'independent_cycles' && (groups || []).length < 2) {
+      issues.push({ severity: 'warn', text: '仅检测到一个完整/部分周期；可拟合曲线，但不能估计独立重复测量的不确定度。' });
+    }
+    const memberships = (groups || []).flatMap(g => (g.points || []).map(p => p.sourceIndex).filter(Number.isFinite));
+    const uniqueMemberships = new Set(memberships);
+    const reusedSourcePoints = memberships.length - uniqueMemberships.size;
+    if (reusedSourcePoints && config.analysisMode !== 'legacy_sliding') {
+      issues.push({ severity: 'error', text: `发现 ${reusedSourcePoints} 次原始点重复计入分析；独立重复统计要求每个源点只使用一次。` });
+    } else if (reusedSourcePoints) {
+      issues.push({ severity: 'error', text: `滑动窗口重复使用了 ${reusedSourcePoints} 次原始点；该模式仅供形状诊断，禁止输出独立重复统计量或可报告拟合结论。` });
+    }
     if (sizes.some(s => s < 5)) issues.push({ severity: 'warn', text: `至少一组切片少于 5 点（组大小：${sizes.join('/')}）；组间均值与误差带不稳健。` });
     const coherence = this.groupCoherence(groups);
     if (coherence !== null && coherence < 0.4) {
@@ -37,10 +48,10 @@ class DataQuality {
     } else if (coherence !== null && coherence < 0.9) {
       issues.push({ severity: 'warn', text: `三段周期曲线一致性偏低（最小相关系数 ${coherence.toFixed(3)}）；平均曲线仅供排查，不能作为重复测量结论。` });
     }
-    if (fitResult && fitResult.params.rSquared < 0.9) issues.push({ severity: 'warn', text: `拟合 R²=${fitResult.params.rSquaredPercent}%；马吕斯模型与数据一致性有限，不应据此作强物理反演。` });
-    if (!fitResult) issues.push({ severity: 'error', text: '拟合未完成；不输出基于拟合的物理参数。' });
+    if (fitResult && fitResult.params.rSquared < 0.9) issues.push({ severity: 'warn', text: `拟合 R²=${fitResult.params.rSquaredPercent}%；经验谐波模型与数据一致性有限，不应据此作强物理反演。` });
+    if (!fitResult) issues.push({ severity: 'error', text: config.fitFailureReason || '拟合未完成；不输出基于拟合的物理参数。' });
     const claimLevel = issues.some(x => x.severity === 'error') ? 'blocked' : issues.some(x => x.severity === 'warn') ? 'qualified' : 'supported';
-    return { ...inputAudit, clampedPoints: clamped, groupSizes: sizes, groupCoherence: coherence, claimLevel, issues };
+    return { ...inputAudit, clampedPoints: clamped, groupSizes: sizes, groupCoherence: coherence, reusedSourcePoints, claimLevel, issues };
   }
 
   static groupCoherence(groups) {
@@ -50,9 +61,12 @@ class DataQuality {
     const correlations = [];
     for (let i = 0; i < usable.length; i++) {
       for (let j = i + 1; j < usable.length; j++) {
-        const a = usable[i].points.map(p => p.y);
-        const b = usable[j].points.map(p => p.y);
-        const n = Math.min(a.length, b.length);
+        const aMap = new Map(usable[i].points.map(p => [Math.round(p.relAngle * 1000) / 1000, p.y]));
+        const bMap = new Map(usable[j].points.map(p => [Math.round(p.relAngle * 1000) / 1000, p.y]));
+        const common = [...aMap.keys()].filter(key => bMap.has(key)).sort((x, y) => x - y);
+        const a = common.map(key => aMap.get(key));
+        const b = common.map(key => bMap.get(key));
+        const n = common.length;
         if (n < 5) continue;
         const aa = a.slice(0, n), bb = b.slice(0, n);
         const ma = aa.reduce((s, v) => s + v, 0) / n;
@@ -73,7 +87,8 @@ class DataQuality {
     const coherence = audit.groupCoherence === null || audit.groupCoherence === undefined ? '-' : audit.groupCoherence.toFixed(3);
     const included = Array.isArray(audit.analysisGroups) && audit.analysisGroups.length ? audit.analysisGroups.join('、') : '无';
     const excluded = Array.isArray(audit.excludedGroups) && audit.excludedGroups.length ? `｜已隐藏且不参与分析 ${audit.excludedGroups.join('、')}` : '';
-    const head = `有效点 ${audit.pointCount}｜参与分析 ${included}${excluded}｜角度覆盖 ${audit.angleSpan}°｜重复 x ${audit.duplicateX}｜周期一致性 ${coherence}｜负值截断 ${audit.clampedPoints || 0}`;
+    const parser = audit.parserDiagnostics ? `｜导入接受/拒绝 ${audit.parserDiagnostics.acceptedLines || 0}/${audit.parserDiagnostics.rejectedLines || 0}` : '';
+    const head = `有效点 ${audit.pointCount}${parser}｜参与分析 ${included}${excluded}｜角度覆盖 ${audit.angleSpan}°｜重复 x ${audit.duplicateX}｜源点重复计入 ${audit.reusedSourcePoints || 0}｜周期一致性 ${coherence}｜负值截断 ${audit.clampedPoints || 0}`;
     if (!audit.issues.length) return `${head}。未发现自动规则异常；仍需结合实验校准与原始记录判断。`;
     return `${head}。${audit.issues.map(x => `${x.severity === 'error' ? '错误' : '提示'}：${x.text}`).join(' ')}`;
   }

@@ -5,45 +5,77 @@
 
 class DataParser {
   static parseRawData(rawText, angleMultiplier = 10) {
-    if (!rawText || typeof rawText !== 'string') return [];
-    
-    const lines = rawText.trim().split(/\r?\n/);
+    return this.parseRawDataDetailed(rawText, angleMultiplier).points;
+  }
+
+  static parseRawDataDetailed(rawText, angleMultiplier = 10) {
+    const diagnostics = {
+      totalLines: 0,
+      acceptedLines: 0,
+      rejectedLines: 0,
+      skippedLines: 0,
+      rejected: []
+    };
+    if (!rawText || typeof rawText !== 'string') return { points: [], diagnostics };
+
+    const validMultiplier = Number.isFinite(angleMultiplier) && angleMultiplier > 0 ? angleMultiplier : NaN;
+    const lines = rawText.split(/\r?\n/);
     const result = [];
-    const numRegex = /[-+]?[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?/g;
+    const numberToken = /^[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$/;
+    diagnostics.totalLines = lines.length;
 
     for (let i = 0; i < lines.length; i++) {
       let line = lines[i].trim();
-      if (!line) continue;
+      if (!line) { diagnostics.skippedLines++; continue; }
       
       if (line.startsWith('#') || line.startsWith('//') || line.startsWith('%') || line.startsWith(';')) {
+        diagnostics.skippedLines++;
         continue;
       }
-      
-      const matches = line.match(numRegex);
-      if (!matches) continue;
 
-      if (matches.length >= 2) {
-        const rawX = parseFloat(matches[0]);
-        const y = parseFloat(matches[1]);
+      const tokens = line.split(/[\t,;\s]+/).filter(Boolean);
+      const numericTokens = tokens.filter(token => numberToken.test(token));
+      const hasText = tokens.some(token => !numberToken.test(token));
+      if (hasText || numericTokens.length < 1 || numericTokens.length > 2) {
+        diagnostics.rejectedLines++;
+        diagnostics.rejected.push({
+          line: i + 1,
+          reason: hasText ? '包含表头或非数值字段' : numericTokens.length > 2 ? '数值列超过两列，请明确选择 X/Y 列' : '未发现有效数值',
+          preview: line.slice(0, 120)
+        });
+        continue;
+      }
+
+      if (numericTokens.length === 2) {
+        const rawX = Number(numericTokens[0]);
+        const y = Number(numericTokens[1]);
         if (Number.isFinite(rawX) && Number.isFinite(y)) {
           result.push({
-            rawX: rawX,
-            y: y,
-            angle: rawX * (Number.isFinite(angleMultiplier) ? angleMultiplier : 10)
+            rawX,
+            y,
+            angle: rawX * validMultiplier,
+            sourceLine: i + 1
           });
+          diagnostics.acceptedLines++;
         }
-      } else if (matches.length === 1) {
-        const y = parseFloat(matches[0]);
+      } else {
+        const y = Number(numericTokens[0]);
         if (Number.isFinite(y)) {
           result.push({
             rawX: result.length,
-            y: y,
-            angle: result.length * (Number.isFinite(angleMultiplier) ? angleMultiplier : 10)
+            y,
+            angle: result.length * validMultiplier,
+            sourceLine: i + 1
           });
+          diagnostics.acceptedLines++;
         }
       }
     }
-    return result;
+    if (!Number.isFinite(validMultiplier)) {
+      diagnostics.rejected.push({ line: 0, reason: '角度换算倍率必须为正数', preview: String(angleMultiplier) });
+    }
+    diagnostics.rejected = diagnostics.rejected.slice(0, 20);
+    return { points: result, diagnostics };
   }
 
   static stringifyData(points) {
@@ -142,6 +174,42 @@ class DataParser {
     });
   }
 
+  static extractIndependentCycles(dataPoints, periodDeg = 360, maxGroups = 3) {
+    if (!Array.isArray(dataPoints) || !dataPoints.length) return [];
+    const valid = dataPoints.filter(p => Number.isFinite(p.angle));
+    if (!valid.length || !Number.isFinite(periodDeg) || periodDeg <= 0) return [];
+    const minAngle = Math.min(...valid.map(p => p.angle));
+    const maxAngle = Math.max(...valid.map(p => p.angle));
+    const fullCycles = Math.max(1, Math.min(maxGroups, Math.floor((maxAngle - minAngle) / periodDeg) || 1));
+    const colors = ['#3b82f6', '#10b981', '#f59e0b'];
+    const groups = Array.from({ length: fullCycles }, (_, i) => ({
+      id: `group${i + 1}`,
+      groupIndex: i,
+      name: `Repeat ${i + 1} (${periodDeg}° 独立周期)`,
+      color: colors[i % colors.length],
+      start: minAngle + i * periodDeg,
+      end: minAngle + (i + 1) * periodDeg,
+      points: []
+    }));
+
+    valid.forEach(p => {
+      const delta = p.angle - minAngle;
+      let groupIndex = Math.floor(delta / periodDeg);
+      if (groupIndex >= fullCycles) groupIndex = fullCycles - 1;
+      if (groupIndex < 0) groupIndex = 0;
+      let relAngle = ((delta % periodDeg) + periodDeg) % periodDeg;
+      if (p.angle === maxAngle && delta > 0 && Math.abs(relAngle) < 1e-9) relAngle = periodDeg;
+      groups[groupIndex].points.push({
+        rawX: p.rawX,
+        sourceIndex: p.sourceIndex,
+        originalAngle: p.angle,
+        relAngle,
+        y: Number.isFinite(p.effectiveY) ? p.effectiveY : p.y
+      });
+    });
+    return groups.filter(group => group.points.length);
+  }
+
   static computeStatistics(groups) {
     if (!Array.isArray(groups) || groups.length === 0) return null;
 
@@ -178,7 +246,7 @@ class DataParser {
         variance = sampleValues.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / (n - 1);
       }
       const sd = Math.sqrt(Math.max(0, variance));
-      const se = n > 0 ? sd / Math.sqrt(n) : 0;
+      const se = n > 1 ? sd / Math.sqrt(n) : null;
       const rsd = (Math.abs(mean) > 1e-6) ? (sd / Math.abs(mean)) * 100 : 0;
 
       stepStats.push({
@@ -188,7 +256,7 @@ class DataParser {
         sampleValues: sampleValues,
         mean: Number(mean.toFixed(2)),
         sd: Number(sd.toFixed(2)),
-        se: Number(se.toFixed(2)),
+        se: se === null ? null : Number(se.toFixed(2)),
         rsd: Number(rsd.toFixed(2))
       });
     });

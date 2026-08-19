@@ -1,22 +1,36 @@
 /** Lightweight, dependency-free XLSX writer for local/offline Chrome extensions. */
 class XlsxExporter {
   static exportPolarization(state) {
-    if (!state?.stats || !state?.rawBaselineResult) return false;
+    if (!state?.rawBaselineResult) return false;
 
     const { rawPoints, baseline, subtracted, unboundedSubtracted } = state.rawBaselineResult;
-    const stats = state.stats.stepStats || [];
+    const stats = state.stats?.stepStats || [];
     const rawRows = [['Index', 'X', 'Angle_deg', 'Raw_Intensity', 'Baseline', 'Net_Unclamped', 'Net_Displayed']];
     rawPoints.forEach((p, i) => rawRows.push([i + 1, p.rawX, p.angle, p.y, baseline[i], (unboundedSubtracted || subtracted)[i], subtracted[i]]));
-
-    const originRows = [['Angle_deg', 'Group1', 'Group2', 'Group3', 'Mean', 'SD', 'SE', 'RSD_percent', 'N']];
-    stats.forEach(s => originRows.push([s.relAngle, s.values[0] ?? '', s.values[1] ?? '', s.values[2] ?? '', s.mean, s.sd, s.se, s.rsd, s.n]));
 
     const p = state.fitResult?.params || {};
     const a = state.qualityAudit || {};
     const cfg = state.provenance || {};
+    const reportable = a.claimLevel !== 'blocked';
+    const originRows = [['Angle_deg', 'Group1', 'Group2', 'Group3', 'Mean', 'SD', 'SE', 'RSD_percent', 'N']];
+    stats.forEach(s => originRows.push([
+      s.relAngle, s.values[0] ?? '', s.values[1] ?? '', s.values[2] ?? '',
+      reportable ? s.mean : '', reportable ? s.sd : '', reportable ? (s.se ?? '') : '',
+      reportable ? s.rsd : '', reportable ? s.n : ''
+    ]));
     const notes = [
       ['Field', 'Value'],
+      ['Analysis_ID', cfg.analysisId || ''],
+      ['PolarisView_version', cfg.appVersion || ''],
       ['Exported_UTC', cfg.processedAt || new Date().toISOString()],
+      ['Source_type', cfg.source?.sourceType || ''],
+      ['Source_file', cfg.source?.fileName || ''],
+      ['Source_size_bytes', cfg.source?.sizeBytes ?? ''],
+      ['Source_encoding', cfg.source?.encoding || ''],
+      ['Source_SHA256', cfg.source?.sha256 || ''],
+      ['Parser_accepted_lines', cfg.parserDiagnostics?.acceptedLines ?? ''],
+      ['Parser_rejected_lines', cfg.parserDiagnostics?.rejectedLines ?? ''],
+      ['Analysis_mode', cfg.analysisMode || ''],
       ['Baseline_algorithm', cfg.baseline?.algorithm || 'none'],
       ['Baseline_parameters', JSON.stringify(cfg.baseline?.options || {})],
       ['Negative_value_clamp', cfg.baseline?.clampZero ? 'on' : 'off'],
@@ -24,18 +38,34 @@ class XlsxExporter {
       ['Analysis_groups', (a.analysisGroups || []).join('; ') || 'none'],
       ['Excluded_groups', (a.excludedGroups || []).join('; ') || 'none'],
       ['Statistics_group_count', stats.length ? Math.max(...stats.map(s => s.n || 0)) : 0],
+      ['Reused_source_memberships', a.reusedSourcePoints || 0],
       ['Data_quality_status', a.claimLevel || 'unknown'],
       ['Cycle_coherence_min_r', a.groupCoherence ?? ''],
-      ['DoLP_percent', p.dolpPercent ?? state.stats.summary?.dolpEmpiricalPercent ?? ''],
-      ['Extinction_ratio', state.stats.summary?.extinctionRatio ?? ''],
-      ['Fit_R_squared_percent', p.rSquaredPercent ?? ''],
-      ['OriginPro_note', 'Import OriginPro_Data: column A is X; B-D are repeats; E-H are derived statistics. No charts are embedded.']
+      ['Modulation_proxy_percent', reportable ? (p.dolpPercent ?? state.stats?.summary?.dolpEmpiricalPercent ?? '') : 'not reportable'],
+      ['Extinction_ratio', reportable ? (state.stats?.summary?.extinctionRatio ?? '') : 'not reportable'],
+      ['Fit_R_squared_percent', reportable ? (p.rSquaredPercent ?? '') : 'not reportable'],
+      ['Axis_theta0_CI95_deg', reportable && p.theta0CI95 ? p.theta0CI95.join(' to ') : ''],
+      ['Modulation_proxy_CI95_percent', reportable && p.dolpCI95Percent ? p.dolpCI95Percent.join(' to ') : ''],
+      ['Fit_degrees_of_freedom', reportable ? (p.degreesOfFreedom ?? '') : 'not reportable'],
+      ['Fit_condition_proxy', reportable ? (p.conditionProxy ?? '') : 'not reportable'],
+      ['Experiment_metadata_JSON', JSON.stringify(cfg.experiment || {})],
+      ['OriginPro_note', 'Import OriginPro_Data: column A is angle; B-D are repeat slots; E-I are derived statistics. No charts are embedded.']
+    ];
+
+    const recipeRows = [
+      ['Section', 'JSON'],
+      ['Source', JSON.stringify(cfg.source || {})],
+      ['Parser', JSON.stringify(cfg.parserDiagnostics || {})],
+      ['Experiment', JSON.stringify(cfg.experiment || {})],
+      ['Processing', JSON.stringify(cfg)],
+      ['Quality', JSON.stringify(a)]
     ];
 
     const blob = this.createWorkbook([
       { name: 'OriginPro_Data', rows: originRows },
       { name: 'Raw_Preprocessing', rows: rawRows },
-      { name: 'Processing_Notes', rows: notes }
+      { name: 'Processing_Notes', rows: notes },
+      { name: 'Analysis_Recipe', rows: recipeRows }
     ]);
     this.download(blob, `polarization_originpro_${this.fileStamp()}.xlsx`);
     return true;

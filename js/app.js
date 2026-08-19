@@ -1,10 +1,11 @@
 /**
  * app.js - 核心应用协调器 (Application Orchestrator - Bulletproof & Robust)
- * 工业级鲁棒控制器：GBK/UTF-8 自适应、8大基线算法管道、DoLP 线偏振度、智能同相对齐、全生命周期 DOM 尺寸校准
+ * 科研分析控制器：可追溯解析、透明预处理、独立周期统计、条件性调制度评估与质量门控
  */
 
 class PolarizationApp {
   constructor() {
+    ExtensionBridge.registerDashboard();
     this.store = new StateStore();
     this.chartManager = null;
     this.tableGrid = null;
@@ -13,6 +14,9 @@ class PolarizationApp {
     this.isSyncing = false;
     this.activeView = 'polar';
     this.analysisGroupVisibility = { group1: true, group2: true, group3: true };
+    this.parserDiagnostics = { totalLines: 0, acceptedLines: 0, rejectedLines: 0, skippedLines: 0, rejected: [] };
+    this.sourceMetadata = { sourceType: 'empty', fileName: '', sizeBytes: 0, lastModified: '', encoding: '', sha256: '' };
+    this.analysisId = '';
 
     this.init();
   }
@@ -39,12 +43,21 @@ class PolarizationApp {
         onChange: (updatedPoints) => {
           if (!this.isSyncing) {
             this.currentRawPoints = Array.isArray(updatedPoints) ? [...updatedPoints] : [];
+            this.parserDiagnostics = {
+              totalLines: this.currentRawPoints.length,
+              acceptedLines: this.currentRawPoints.length,
+              rejectedLines: 0,
+              skippedLines: 0,
+              rejected: []
+            };
             const rawDataInput = document.getElementById('rawDataInput');
             if (rawDataInput) {
               this.isSyncing = true;
               rawDataInput.value = DataParser.stringifyData(this.currentRawPoints);
               this.isSyncing = false;
             }
+            this.sourceMetadata = { ...this.sourceMetadata, sourceType: 'table_edit', fileName: this.sourceMetadata.fileName || 'table-input' };
+            this.refreshFingerprint(DataParser.stringifyData(this.currentRawPoints));
             this.processAndRender();
           }
         }
@@ -52,16 +65,15 @@ class PolarizationApp {
 
       // 3. 绑定界面交互与算法参数事件
       this.bindEvents();
+      this.updateBaselineControls(document.getElementById('baselineAlgo')?.value || 'none');
 
       // 4. 检查是否有从浏览器插件 Popup 传递过来的剪贴板数据
       ExtensionBridge.checkPendingClipboard((clipboardText) => {
         if (clipboardText && clipboardText.trim().length > 0) {
           const rawDataInput = document.getElementById('rawDataInput');
           if (rawDataInput) rawDataInput.value = clipboardText;
-          const mult = parseFloat(document.getElementById('angleMultiplier').value) || 10;
-          this.currentRawPoints = DataParser.parseRawData(clipboardText, mult);
-          this.tableGrid.setData(this.currentRawPoints);
-          this.processAndRender();
+          const mult = parseFloat(document.getElementById('angleMultiplier').value);
+          this.ingestText(clipboardText, mult, { sourceType: 'clipboard', fileName: 'clipboard-data', encoding: 'text' });
           return;
         }
       });
@@ -115,12 +127,8 @@ class PolarizationApp {
     if (rawDataInput) {
       rawDataInput.addEventListener('input', () => {
         if (!this.isSyncing) {
-          const mult = parseFloat(document.getElementById('angleMultiplier').value) || 10;
-          this.currentRawPoints = DataParser.parseRawData(rawDataInput.value, mult);
-          this.isSyncing = true;
-          this.tableGrid.setData(this.currentRawPoints);
-          this.isSyncing = false;
-          this.processAndRender();
+          const mult = parseFloat(document.getElementById('angleMultiplier').value);
+          this.ingestText(rawDataInput.value, mult, { sourceType: 'text', fileName: 'pasted-text', encoding: 'text' });
         }
       });
     }
@@ -129,7 +137,7 @@ class PolarizationApp {
     const angleMultiplier = document.getElementById('angleMultiplier');
     if (angleMultiplier) {
       angleMultiplier.addEventListener('input', (e) => {
-        const mult = parseFloat(e.target.value) || 10;
+        const mult = parseFloat(e.target.value);
         this.tableGrid.setAngleMultiplier(mult);
         this.currentRawPoints.forEach(p => p.angle = p.rawX * mult);
         this.processAndRender();
@@ -157,6 +165,12 @@ class PolarizationApp {
         dropZone.classList.remove('dragover');
         if (e.dataTransfer.files.length > 0) this.readFile(e.dataTransfer.files[0]);
       });
+      dropZone.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          fileInput.click();
+        }
+      });
       fileInput.addEventListener('change', (e) => {
         if (e.target.files.length > 0) this.readFile(e.target.files[0]);
       });
@@ -167,6 +181,15 @@ class PolarizationApp {
       const el = document.getElementById(id);
       if (el) el.addEventListener('change', () => this.processAndRender());
     });
+
+    const analysisMode = document.getElementById('analysisMode');
+    if (analysisMode) {
+      analysisMode.addEventListener('change', () => {
+        this.updateAnalysisModeControls();
+        this.processAndRender();
+      });
+      this.updateAnalysisModeControls();
+    }
 
     // 8大背景扣除算法与参数
     const baselineAlgo = document.getElementById('baselineAlgo');
@@ -277,8 +300,9 @@ class PolarizationApp {
 
     viewButtons.forEach(btn => {
       btn.addEventListener('click', () => {
-        viewButtons.forEach(b => b.classList.remove('active'));
+        viewButtons.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
         btn.classList.add('active');
+        btn.setAttribute('aria-pressed', 'true');
         const view = btn.dataset.view;
         this.activeView = view;
 
@@ -329,11 +353,21 @@ class PolarizationApp {
     const tabContents = document.querySelectorAll('.tab-pane');
     tabBtns.forEach(btn => {
       btn.addEventListener('click', () => {
-        tabBtns.forEach(b => b.classList.remove('active'));
+        tabBtns.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
         tabContents.forEach(c => c.style.display = 'none');
         btn.classList.add('active');
+        btn.setAttribute('aria-selected', 'true');
         const target = document.getElementById(btn.dataset.tab);
         if (target) target.style.display = 'block';
+      });
+      btn.addEventListener('keydown', (e) => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+        e.preventDefault();
+        const items = [...tabBtns];
+        const current = items.indexOf(btn);
+        const next = e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : (current + (e.key === 'ArrowRight' ? 1 : -1) + items.length) % items.length;
+        items[next].focus();
+        items[next].click();
       });
     });
 
@@ -383,6 +417,29 @@ class PolarizationApp {
     if (btnRestoreAnalysisGroups) {
       btnRestoreAnalysisGroups.addEventListener('click', () => this.restoreAllAnalysisGroups());
     }
+
+    ['metaSampleId', 'metaInstrument', 'metaWavelength', 'metaExposure', 'metaGain', 'metaOperator', 'metaNotes'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', () => this.processAndRender());
+    });
+
+    const btnExportRecipe = document.getElementById('btnExportRecipe');
+    if (btnExportRecipe) btnExportRecipe.addEventListener('click', () => this.exportAnalysisRecipe());
+  }
+
+  updateAnalysisModeControls() {
+    const mode = document.getElementById('analysisMode')?.value || 'independent_cycles';
+    const ranges = document.getElementById('legacyGroupRanges');
+    const help = document.getElementById('analysisModeHelp');
+    const phaseLock = document.getElementById('autoPhaseLock');
+    if (ranges) ranges.style.display = mode === 'legacy_sliding' ? 'grid' : 'none';
+    if (phaseLock) {
+      phaseLock.disabled = mode !== 'legacy_sliding';
+      if (mode !== 'legacy_sliding') phaseLock.checked = false;
+    }
+    if (help) help.textContent = mode === 'legacy_sliding'
+      ? '窗口允许重叠，只用于曲线形状诊断；重复源点不会被解释为独立重复。'
+      : '按 360° 自动划分非重叠重复扫描；每个原始点只计入一次。';
   }
 
   loadPreset(presetKey) {
@@ -393,11 +450,9 @@ class PolarizationApp {
     if (angleMultiplier) angleMultiplier.value = preset.multiplier;
     if (rawDataInput) rawDataInput.value = preset.data;
 
-    this.store.setState({ currentDatasetName: preset.name });
-    this.currentRawPoints = DataParser.parseRawData(preset.data, preset.multiplier);
     this.tableGrid.setAngleMultiplier(preset.multiplier);
-    this.tableGrid.setData(this.currentRawPoints);
-    this.processAndRender();
+    this.store.setState({ currentDatasetName: preset.name });
+    this.ingestText(preset.data, preset.multiplier, { sourceType: 'example', fileName: `${presetKey}.txt`, encoding: 'embedded UTF-8' });
   }
 
   initializeEmptyDataset() {
@@ -409,8 +464,56 @@ class PolarizationApp {
 
     this.currentRawPoints = [];
     this.parsedState = null;
+    this.parserDiagnostics = { totalLines: 0, acceptedLines: 0, rejectedLines: 0, skippedLines: 0, rejected: [] };
+    this.sourceMetadata = { sourceType: 'empty', fileName: '', sizeBytes: 0, lastModified: '', encoding: '', sha256: '' };
+    this.analysisId = '';
     this.tableGrid.setData([]);
     this.store.setState({ currentDatasetName: '未导入数据' });
+    this.store.saveLatestMetrics(null, null);
+    ExtensionBridge.notifyStateUpdate(null, null);
+    this.resetDerivedDisplays();
+    this.setExportAvailability(false);
+    this.updateSourceFingerprintDisplay();
+  }
+
+  ingestText(text, multiplier, source = {}) {
+    const parsed = DataParser.parseRawDataDetailed(text, multiplier);
+    this.currentRawPoints = parsed.points;
+    this.parserDiagnostics = parsed.diagnostics;
+    this.sourceMetadata = {
+      sourceType: source.sourceType || 'text',
+      fileName: source.fileName || 'text-input',
+      sizeBytes: Number.isFinite(source.sizeBytes) ? source.sizeBytes : new Blob([text || '']).size,
+      lastModified: source.lastModified || '',
+      encoding: source.encoding || 'text',
+      sha256: ''
+    };
+    this.isSyncing = true;
+    this.tableGrid.setData(this.currentRawPoints);
+    this.isSyncing = false;
+    this.refreshFingerprint(text || '');
+    this.processAndRender();
+  }
+
+  async refreshFingerprint(text) {
+    const requestId = (this.fingerprintRequestId || 0) + 1;
+    this.fingerprintRequestId = requestId;
+    try {
+      const bytes = new TextEncoder().encode(text);
+      const digest = await crypto.subtle.digest('SHA-256', bytes);
+      if (requestId !== this.fingerprintRequestId) return;
+      this.sourceMetadata.sha256 = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+      const stamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
+      this.analysisId = `PV-${stamp}-${this.sourceMetadata.sha256.slice(0, 8)}`;
+      if (this.parsedState?.provenance) {
+        this.parsedState.provenance.source = { ...this.sourceMetadata };
+        this.parsedState.provenance.analysisId = this.analysisId;
+      }
+      this.updateSourceFingerprintDisplay();
+    } catch (e) {
+      this.sourceMetadata.sha256 = 'unavailable';
+      this.updateSourceFingerprintDisplay();
+    }
   }
 
   readFile(file) {
@@ -419,6 +522,7 @@ class PolarizationApp {
     reader.onload = (e) => {
       const buffer = e.target.result;
       let content = '';
+      let encoding = 'UTF-8';
       try {
         const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
         content = utf8Decoder.decode(buffer);
@@ -426,18 +530,24 @@ class PolarizationApp {
         try {
           const gbkDecoder = new TextDecoder('gbk');
           content = gbkDecoder.decode(buffer);
+          encoding = 'GBK';
         } catch (err2) {
           content = new TextDecoder().decode(buffer);
+          encoding = 'UTF-8 replacement mode';
         }
       }
 
       const rawDataInput = document.getElementById('rawDataInput');
       if (rawDataInput) rawDataInput.value = content;
-      const mult = parseFloat(document.getElementById('angleMultiplier').value) || 10;
+      const mult = parseFloat(document.getElementById('angleMultiplier').value);
       this.store.setState({ currentDatasetName: file.name || '本地文件' });
-      this.currentRawPoints = DataParser.parseRawData(content, mult);
-      this.tableGrid.setData(this.currentRawPoints);
-      this.processAndRender();
+      this.ingestText(content, mult, {
+        sourceType: 'file',
+        fileName: file.name || 'local-file',
+        sizeBytes: file.size,
+        lastModified: file.lastModified ? new Date(file.lastModified).toISOString() : '',
+        encoding
+      });
     };
     reader.readAsArrayBuffer(file);
   }
@@ -506,10 +616,18 @@ class PolarizationApp {
   }
 
   processAndRender() {
-    if (!Array.isArray(this.currentRawPoints) || this.currentRawPoints.length === 0) return;
+    if (!Array.isArray(this.currentRawPoints) || this.currentRawPoints.length === 0) {
+      this.parsedState = null;
+      this.resetDerivedDisplays();
+      this.setExportAvailability(false);
+      if (this.chartManager) this.chartManager.clearCharts();
+      const empty = document.getElementById('emptyWorkspaceState');
+      if (empty) empty.style.display = 'flex';
+      return;
+    }
 
     try {
-      const multiplier = parseFloat(document.getElementById('angleMultiplier').value) || 10;
+      const multiplier = parseFloat(document.getElementById('angleMultiplier').value);
       const yRaw = this.currentRawPoints.map(p => p.y);
       const xRaw = this.currentRawPoints.map(p => p.rawX);
 
@@ -551,13 +669,15 @@ class PolarizationApp {
       }));
 
       // 2. 三组切片与统计计算 (含智能相位锁定)
-      const g1Start = parseFloat(document.getElementById('g1Start').value) || 0;
-      const g1End = parseFloat(document.getElementById('g1End').value) || 36;
-      const g2Start = parseFloat(document.getElementById('g2Start').value) || 18;
-      const g2End = parseFloat(document.getElementById('g2End').value) || 54;
-      const g3Start = parseFloat(document.getElementById('g3Start').value) || 36;
-      const g3End = parseFloat(document.getElementById('g3End').value) || 72;
+      const finiteOr = (value, fallback) => Number.isFinite(parseFloat(value)) ? parseFloat(value) : fallback;
+      const g1Start = finiteOr(document.getElementById('g1Start').value, 0);
+      const g1End = finiteOr(document.getElementById('g1End').value, 36);
+      const g2Start = finiteOr(document.getElementById('g2Start').value, 18);
+      const g2End = finiteOr(document.getElementById('g2End').value, 54);
+      const g3Start = finiteOr(document.getElementById('g3Start').value, 36);
+      const g3End = finiteOr(document.getElementById('g3End').value, 72);
       const autoPhaseLock = document.getElementById('autoPhaseLock') ? document.getElementById('autoPhaseLock').checked : false;
+      const analysisMode = document.getElementById('analysisMode')?.value || 'independent_cycles';
 
       const groupConfigs = [
         { id: 'group1', groupIndex: 0, name: `Group 1 (x: ${g1Start}~${g1End})`, start: g1Start, end: g1End, color: '#3b82f6' },
@@ -565,7 +685,9 @@ class PolarizationApp {
         { id: 'group3', groupIndex: 2, name: `Group 3 (x: ${g3Start}~${g3End})`, start: g3Start, end: g3End, color: '#f59e0b' }
       ];
 
-      const groups = DataParser.extractGroups(processedPoints, groupConfigs, multiplier, autoPhaseLock);
+      const groups = analysisMode === 'independent_cycles'
+        ? DataParser.extractIndependentCycles(processedPoints, 360, 3)
+        : DataParser.extractGroups(processedPoints, groupConfigs, multiplier, autoPhaseLock);
       const activeGroups = groups.filter(g => this.analysisGroupVisibility[g.id] !== false);
       const pointsForFit = activeGroups.flatMap(g => g.points.map(p => ({
         angle: p.relAngle,
@@ -585,8 +707,16 @@ class PolarizationApp {
         fitResult ? fitResult.outliers.map(o => o.sourceIndex).filter(Number.isFinite) : null
       );
       const inputAudit = DataQuality.auditInput(this.currentRawPoints, multiplier);
+      inputAudit.parserDiagnostics = this.parserDiagnostics;
+      if (this.parserDiagnostics.rejectedLines > 0) {
+        inputAudit.issues.push({ severity: 'warn', text: `导入时拒绝 ${this.parserDiagnostics.rejectedLines} 行；请在导入诊断中核对原因。` });
+      }
       const qualityAudit = DataQuality.auditProcessing(inputAudit, baselineResult, activeGroups, fitResult, {
-        autoPhaseLock, bgAlgo, clampZero
+        autoPhaseLock,
+        bgAlgo,
+        clampZero,
+        analysisMode,
+        fitFailureReason: MalusFitter.lastFailureReason
       });
       qualityAudit.analysisGroups = activeGroups.map(g => g.name);
       qualityAudit.excludedGroups = excludedGroups.map(g => g.name);
@@ -598,11 +728,19 @@ class PolarizationApp {
         groups,
         activeGroups,
         stats,
-        fitResult,
+        fitResult: qualityAudit.claimLevel === 'blocked' ? null : fitResult,
+        diagnosticFitResult: fitResult,
         qualityAudit,
+        isReportable: qualityAudit.claimLevel !== 'blocked',
         provenance: {
           processedAt: new Date().toISOString(),
+          appVersion: this.getAppVersion(),
+          analysisId: this.analysisId,
+          source: { ...this.sourceMetadata },
+          parserDiagnostics: this.parserDiagnostics,
+          experiment: this.getExperimentMetadata(),
           angleMultiplier: multiplier,
+          analysisMode,
           baseline: { algorithm: bgAlgo, options: bgOptions, clampZero },
           phaseAlignment: autoPhaseLock ? 'automatic peak alignment (visualization only)' : 'off',
           analysisGroups: activeGroups.map(g => g.id),
@@ -620,15 +758,25 @@ class PolarizationApp {
 
       // 5. 保存遥测指标至插件 Storage
       if (stats && stats.summary) {
-        this.store.saveLatestMetrics(stats.summary, fitResult);
-        ExtensionBridge.notifyStateUpdate(stats.summary, fitResult);
-        this.updateStatsCards(stats.summary, fitResult, baselineResult);
+        if (qualityAudit.claimLevel === 'blocked') {
+          this.store.saveLatestMetrics(null, null);
+          ExtensionBridge.notifyStateUpdate(null, null);
+          this.setBlockedDerivedDisplays();
+        } else {
+          this.store.saveLatestMetrics(stats.summary, fitResult);
+          ExtensionBridge.notifyStateUpdate(stats.summary, fitResult);
+          this.updateStatsCards(stats.summary, fitResult, baselineResult);
+        }
         this.updateDataTable(stats.stepStats);
       }
 
       // 6. 渲染图表
       this.applyFilterConfig();
       this.chartManager.updateData(this.parsedState);
+      if (qualityAudit.claimLevel === 'blocked') this.setBlockedDerivedDisplays();
+      this.setExportAvailability(true, Boolean(stats));
+      const empty = document.getElementById('emptyWorkspaceState');
+      if (empty) empty.style.display = 'none';
     } catch (err) {
       console.error('数据处理管道异常:', err);
     }
@@ -708,6 +856,86 @@ class PolarizationApp {
     this.processAndRender();
   }
 
+  getAppVersion() {
+    try {
+      return typeof chrome !== 'undefined' && chrome.runtime?.getManifest ? chrome.runtime.getManifest().version : '3.0-development';
+    } catch (e) {
+      return '3.0-development';
+    }
+  }
+
+  getExperimentMetadata() {
+    const value = id => document.getElementById(id)?.value?.trim() || '';
+    return {
+      sampleId: value('metaSampleId'),
+      instrument: value('metaInstrument'),
+      wavelengthNm: value('metaWavelength'),
+      exposureMs: value('metaExposure'),
+      gain: value('metaGain'),
+      operator: value('metaOperator'),
+      notes: value('metaNotes')
+    };
+  }
+
+  updateSourceFingerprintDisplay() {
+    const output = document.getElementById('sourceFingerprint');
+    if (!output) return;
+    if (this.sourceMetadata.sourceType === 'empty') {
+      output.textContent = '尚未导入数据。';
+      return;
+    }
+    const hash = this.sourceMetadata.sha256 && this.sourceMetadata.sha256 !== 'unavailable'
+      ? `${this.sourceMetadata.sha256.slice(0, 16)}…`
+      : '计算中/不可用';
+    output.textContent = `来源：${this.sourceMetadata.fileName || this.sourceMetadata.sourceType}｜编码：${this.sourceMetadata.encoding || '-'}｜SHA-256：${hash}｜Analysis ID：${this.analysisId || '生成中'}`;
+  }
+
+  setExportAvailability(enabled, hasStatistics = enabled) {
+    ['btnExportCsv', 'btnExportXlsx', 'btnExportRecipe'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = !enabled;
+    });
+    ['btnGenerateReport', 'btnExportPng', 'btnExportSvg'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = !hasStatistics;
+    });
+  }
+
+  resetDerivedDisplays(label = '—') {
+    ['ribbonDolp', 'ribbonER', 'ribbonTheta', 'ribbonR2', 'ribbonBg', 'ribbonModulation', 'ribbonRmse',
+      'statDolp', 'statExtinctionRatio', 'statExtinctionDB', 'statModulation', 'fitTheta0', 'fitRSquared', 'fitRetardance', 'fitRmse']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.textContent = label; });
+    const tbody = document.getElementById('dataTableBody');
+    if (tbody) tbody.innerHTML = '';
+  }
+
+  setBlockedDerivedDisplays() {
+    ['ribbonDolp', 'ribbonER', 'ribbonTheta', 'ribbonR2', 'ribbonBg', 'ribbonModulation', 'ribbonRmse',
+      'statDolp', 'statExtinctionRatio', 'statExtinctionDB', 'statModulation', 'fitTheta0', 'fitRSquared', 'fitRetardance', 'fitRmse']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.textContent = '不可报告'; });
+  }
+
+  exportAnalysisRecipe() {
+    if (!this.parsedState?.provenance) return;
+    const recipe = {
+      schema: 'polarisview-analysis-recipe/v1',
+      analysisId: this.analysisId,
+      appVersion: this.getAppVersion(),
+      source: this.sourceMetadata,
+      parserDiagnostics: this.parserDiagnostics,
+      experiment: this.getExperimentMetadata(),
+      processing: this.parsedState.provenance,
+      quality: this.parsedState.qualityAudit
+    };
+    const blob = new Blob([JSON.stringify(recipe, null, 2)], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `polarisview_recipe_${this.analysisId || 'analysis'}.json`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
   updateStatsCards(summary, fitResult, baselineResult = null) {
     if (!summary) return;
 
@@ -777,7 +1005,7 @@ class PolarizationApp {
         <td>${gVals[2] !== undefined ? gVals[2] : '-'}</td>
         <td style="color:#ef4444;font-weight:600;">${st.mean}</td>
         <td>±${st.sd}</td>
-        <td>±${st.se}</td>
+        <td>${st.se === null ? 'N/A' : `±${st.se}`}</td>
         <td>${st.rsd}%</td>
       `;
       tbody.appendChild(tr);
@@ -785,23 +1013,30 @@ class PolarizationApp {
   }
 
   exportCsv() {
-    if (!this.parsedState || !this.parsedState.stats) return;
-    const { stepStats, summary } = this.parsedState.stats;
+    if (!this.parsedState?.rawBaselineResult) return;
+    const { stepStats = [], summary = {} } = this.parsedState.stats || {};
     const { rawPoints, baseline, subtracted } = this.parsedState.rawBaselineResult;
     const p = this.parsedState.fitResult ? this.parsedState.fitResult.params : {};
 
     const provenance = this.parsedState.provenance || {};
     const audit = this.parsedState.qualityAudit || {};
+    const reportable = audit.claimLevel !== 'blocked';
     let csv = '# 1/2波片偏振测量综合分析导出数据\n';
+    csv += `# Analysis ID: ${provenance.analysisId || '-'}; PolarisView: ${provenance.appVersion || '-'}\n`;
+    csv += `# 数据来源: ${provenance.source?.fileName || provenance.source?.sourceType || '-'}; SHA-256: ${provenance.source?.sha256 || '-'}; 编码: ${provenance.source?.encoding || '-'}\n`;
     csv += `# 处理时间(UTC): ${provenance.processedAt || '-'}\n`;
-    csv += `# 原始数据点: ${audit.pointCount || 0}; 角度覆盖: ${audit.angleSpan || 0} deg; 重复x: ${audit.duplicateX || 0}\n`;
+    csv += `# 原始数据点: ${audit.pointCount || 0}; 角度覆盖: ${audit.angleSpan || 0} deg; 重复x: ${audit.duplicateX || 0}; 拒绝行: ${provenance.parserDiagnostics?.rejectedLines || 0}\n`;
+    csv += `# 分组模式: ${provenance.analysisMode || '-'}; 源点重复计入: ${audit.reusedSourcePoints || 0}\n`;
     csv += `# 基线: ${provenance.baseline?.algorithm || '-'}; 参数: ${JSON.stringify(provenance.baseline?.options || {})}; 负值截断: ${provenance.baseline?.clampZero ? 'on' : 'off'}\n`;
     csv += `# 相位处理: ${provenance.phaseAlignment || 'off'}\n`;
     csv += `# 参与分析组: ${(audit.analysisGroups || []).join(' | ') || 'none'}; 已排除组: ${(audit.excludedGroups || []).join(' | ') || 'none'}\n`;
     csv += `# 结论状态: ${audit.claimLevel || 'unknown'}; 警示: ${(audit.issues || []).map(x => x.text).join(' | ') || 'none'}\n`;
-    csv += `# 线偏振度 DoLP: ${p.dolpPercent || summary.dolpEmpiricalPercent}%\n`;
-    csv += `# 消光比 ER: ${summary.extinctionRatio} (${summary.extinctionRatioDB} dB)\n`;
-    csv += `# 快轴偏角 θ0: ${p.theta0 || '-'} deg, 拟合优度 R2: ${p.rSquaredPercent || '-'}%\n\n`;
+    csv += `# 调制度代理（条件性 DoLP）: ${reportable && summary.dolpEmpiricalPercent !== undefined ? (p.dolpPercent ?? summary.dolpEmpiricalPercent) + '%' : '不可报告'}\n`;
+    csv += `# 消光比 ER: ${reportable ? `${summary.extinctionRatio} (${summary.extinctionRatioDB} dB)` : '不可报告'}\n`;
+    csv += `# 主轴偏角 θ0: ${reportable ? (p.theta0 ?? '-') + ' deg' : '不可报告'}, 拟合优度 R2: ${reportable ? (p.rSquaredPercent ?? '-') + '%' : '不可报告'}\n`;
+    csv += `# θ0 95% CI: ${reportable && p.theta0CI95 ? p.theta0CI95.join(' to ') + ' deg' : '-'}; 调制度代理 95% CI: ${reportable && p.dolpCI95Percent ? p.dolpCI95Percent.join(' to ') + '%' : '-'}\n`;
+    csv += `# 拟合自由度: ${reportable ? (p.degreesOfFreedom ?? '-') : '不可报告'}; 条件数代理: ${reportable ? (p.conditionProxy ?? '-') : '不可报告'}\n`;
+    csv += `# 实验元数据: ${JSON.stringify(provenance.experiment || {})}\n\n`;
 
     csv += '# 全局原始与扣除背景数据\n';
     csv += 'Index_X,Angle(deg),Raw_Y,Baseline_Y,Unclamped_Subtracted_Y,Displayed_Subtracted_Y\n';
@@ -814,7 +1049,7 @@ class PolarizationApp {
     csv += '相对角度(deg),Group1,Group2,Group3,均值(Mean),标准差(SD),标准误(SE),相对标准差(RSD%)\n';
     stepStats.forEach(s => {
       const v = s.values;
-      csv += `${s.relAngle},${v[0] ?? ''},${v[1] ?? ''},${v[2] ?? ''},${s.mean},${s.sd},${s.se},${s.rsd}\n`;
+      csv += `${s.relAngle},${v[0] ?? ''},${v[1] ?? ''},${v[2] ?? ''},${reportable ? s.mean : ''},${reportable ? s.sd : ''},${reportable ? (s.se ?? '') : ''},${reportable ? s.rsd : ''}\n`;
     });
 
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });

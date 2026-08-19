@@ -114,3 +114,103 @@
   padding: 0.3rem 0.45rem;
   border-bottom: 1px solid var(--border-subtle);
 }
+
+/* Scientific integrity states and reproducibility metadata */
+.field-help {
+  margin-top: 0.3rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.metadata-panel summary {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 750;
+  color: var(--text-main);
+}
+
+.metadata-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin-top: 0.7rem;
+}
+
+.metadata-grid label,
+.metadata-notes {
+  display: grid;
+  gap: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.metadata-notes { margin-top: 0.55rem; }
+.metadata-actions { display: flex; justify-content: flex-end; margin-top: 0.55rem; }
+
+.empty-workspace-state {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.empty-workspace-state strong { color: var(--text-main); font-size: 1.05rem; }
+.empty-workspace-state span { max-width: 34rem; font-size: 0.84rem; line-height: 1.6; }
+.empty-state-icon { width: 2.4rem; height: 2.4rem; fill: none; stroke: var(--primary-600); stroke-width: 1.5; }
+.sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
+
+.btn:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+  filter: saturate(0.45);
+  box-shadow: none;
+  transform: none;
+}
+
+.kpi-label, .stat-label, .telemetry-label { font-size: 0.72rem; }
+.form-label, .math-desc, .analysis-participation-copy, .data-table, .grid-table { font-size: 0.75rem; }
+.btn, .btn-sm, .tab-btn, .segmented-btn, .input-mode-btn, .select-input, .input-text { font-size: 0.78rem; }
+
+:where(button, input, select, textarea, [role="button"]):focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.35);
+  outline-offset: 2px;
+}
+
+@media (max-width: 1100px) {
+  html, body { height: auto; min-height: 100%; overflow: auto; }
+  .app-container { width: 100%; height: auto; min-height: 100vh; overflow: visible; }
+  .app-body { flex-direction: column; height: auto; overflow: visible; }
+  .sidebar { width: 100%; min-width: 0; max-width: none; height: auto; max-height: 760px; border-right: 0; border-bottom: 1px solid var(--border-subtle); }
+  .main-stage { min-height: 720px; height: 72vh; }
+}
+
+@media (max-width: 760px) {
+  .app-header { height: auto; align-items: flex-start; flex-direction: column; gap: 0.5rem; padding: 0.65rem; }
+  .header-actions { width: 100%; overflow-x: auto; padding-bottom: 0.2rem; }
+  .brand-subtitle { display: none; }
+  .toolbar { align-items: stretch; flex-direction: column; gap: 0.45rem; }
+  .segmented-control { width: 100%; overflow-x: auto; }
+  .metadata-grid { grid-template-columns: 1fr; }
+  .chart-viewport.dual-view { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+  .main-stage { min-height: 640px; padding: 0.45rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}

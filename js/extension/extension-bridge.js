@@ -7,6 +7,11 @@ class ExtensionBridge {
     return typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id;
   }
 
+  static registerDashboard() {
+    if (!this.isExtensionEnv()) return;
+    chrome.runtime.sendMessage({ action: 'dashboard_ready' }).catch(() => {});
+  }
+
   /**
    * 检查是否有通过 Popup 暂存的剪贴板数据
    */

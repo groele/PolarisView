@@ -1,11 +1,19 @@
 /**
- * malus-fitter.js (Optical Fitting Engine - Enhanced DoLP)
- * 强化版马吕斯拟合引擎：5x5 矩阵条件数阻尼保护、Stokes 矢量解算、DoLP 物理参数反演
+ * malus-fitter.js (Conditioned Harmonic Fitting Engine)
+ * 五参数经验谐波拟合：奇异性拒绝、自由度修正、近似置信区间与条件性调制度代理
  */
 
 class MalusFitter {
   static fitMalusLaw(points) {
-    if (!Array.isArray(points) || points.length < 5) {
+    this.lastFailureReason = '';
+    if (!Array.isArray(points) || points.length < 6) {
+      this.lastFailureReason = '有效拟合点少于 6 个，无法估计五参数模型及残差自由度。';
+      return null;
+    }
+
+    const uniqueAngles = new Set(points.map(p => Math.round((Number(p.angle) || 0) * 1e6) / 1e6));
+    if (uniqueAngles.size < 6) {
+      this.lastFailureReason = `仅 ${uniqueAngles.size} 个独立角度；拟合设计矩阵秩不足。`;
       return null;
     }
 
@@ -50,8 +58,10 @@ class MalusFitter {
     ];
     const B = [sumY, sumYC4, sumYS4, sumYC2, sumYS2];
 
-    const coeffs = this.solve5x5(A, B);
-    if (!coeffs || coeffs.some(v => !Number.isFinite(v))) {
+    const solved = this.solve5x5(A, B);
+    const coeffs = solved ? solved.solution : null;
+    if (!solved || solved.conditionProxy > 1e10 || !coeffs || coeffs.some(v => !Number.isFinite(v))) {
+      this.lastFailureReason = !solved ? '拟合矩阵不可逆。' : `拟合矩阵病态（条件数代理 ${solved.conditionProxy.toExponential(2)}）。`;
       return null;
     }
 
@@ -102,7 +112,34 @@ class MalusFitter {
 
     let rSquared = ssTot > 1e-6 ? 1 - (ssRes / ssTot) : 1;
     rSquared = Math.max(0, Math.min(1, rSquared));
-    const rmse = Math.sqrt(ssRes / n);
+    const degreesOfFreedom = n - 5;
+    const rmse = Math.sqrt(ssRes / Math.max(1, degreesOfFreedom));
+    const inverseNormal = this.invertMatrix(A);
+    const sigma2 = ssRes / Math.max(1, degreesOfFreedom);
+    const coefficientSE = inverseNormal
+      ? inverseNormal.map((row, i) => Math.sqrt(Math.max(0, row[i] * sigma2)))
+      : Array(5).fill(null);
+    const coefficientCI95 = coeffs.map((value, i) => coefficientSE[i] === null
+      ? null
+      : [value - 1.96 * coefficientSE[i], value + 1.96 * coefficientSE[i]]);
+    const covariance = inverseNormal ? inverseNormal.map(row => row.map(value => value * sigma2)) : null;
+    const quadraticVariance = (gradient) => {
+      if (!covariance) return null;
+      let value = 0;
+      for (let i = 0; i < gradient.length; i++) {
+        for (let j = 0; j < gradient.length; j++) value += gradient[i] * covariance[i][j] * gradient[j];
+      }
+      return Math.max(0, value);
+    };
+    const c4Sq = Math.max(C4 * C4, 1e-12);
+    const thetaGradient = [0, -B4 / (4 * c4Sq), A4 / (4 * c4Sq), 0, 0];
+    const thetaSE = Math.sqrt(quadraticVariance(thetaGradient) ?? 0) * 180 / Math.PI;
+    const thetaCI95 = [theta0 - 1.96 * thetaSE, theta0 + 1.96 * thetaSE];
+    const dolpGradient = A0 > 1e-6 && C4 > 1e-6
+      ? [-C4 / (A0 * A0), A4 / (A0 * C4), B4 / (A0 * C4), 0, 0]
+      : [0, 0, 0, 0, 0];
+    const dolpSE = Math.sqrt(quadraticVariance(dolpGradient) ?? 0);
+    const dolpCI95 = [Math.max(0, dolp - 1.96 * dolpSE), Math.min(1, dolp + 1.96 * dolpSE)];
 
     // 2.5σ 离群点探测
     const outlierThreshold = 2.5 * (rmse || 1);
@@ -119,17 +156,25 @@ class MalusFitter {
     return {
       params: {
         theta0: Number(theta0.toFixed(2)),
+        theta0SE: Number(thetaSE.toFixed(3)),
+        theta0CI95: thetaCI95.map(value => Number(value.toFixed(3))),
         rSquared: Number(rSquared.toFixed(5)),
         rSquaredPercent: (rSquared * 100).toFixed(3),
         rmse: Number(rmse.toFixed(2)),
+        degreesOfFreedom,
+        conditionProxy: Number(solved.conditionProxy.toPrecision(6)),
         amplitude: Number((2 * C4).toFixed(2)),
         offset: Number(A0.toFixed(2)),
         dolp: Number(dolp.toFixed(4)),
         dolpPercent: (dolp * 100).toFixed(2),
+        dolpSE: Number(dolpSE.toFixed(5)),
+        dolpCI95Percent: dolpCI95.map(value => Number((value * 100).toFixed(2))),
         dolpHarmonicPercent: (dolpHarmonic * 100).toFixed(2),
         retardance: Number(deltaDeg.toFixed(2)),
         retardanceError: Number(retardanceError.toFixed(2)),
-        coeffs: { A0, A4, B4, A2, B2 }
+        coeffs: { A0, A4, B4, A2, B2 },
+        coefficientSE: { A0: coefficientSE[0], A4: coefficientSE[1], B4: coefficientSE[2], A2: coefficientSE[3], B2: coefficientSE[4] },
+        coefficientCI95
       },
       fittedPoints,
       residuals,
@@ -142,6 +187,8 @@ class MalusFitter {
     const n = 5;
     const M = A.map((row, i) => [...row, b[i]]);
 
+    let minPivot = Infinity;
+    let maxPivot = 0;
     for (let i = 0; i < n; i++) {
       let maxEl = Math.abs(M[i][i]);
       let maxRow = i;
@@ -158,9 +205,10 @@ class MalusFitter {
         M[i][k] = tmp;
       }
 
-      if (Math.abs(M[i][i]) < 1e-12) {
-        M[i][i] = (M[i][i] < 0 ? -1 : 1) * 1e-12;
-      }
+      const pivot = Math.abs(M[i][i]);
+      if (!Number.isFinite(pivot) || pivot < 1e-12) return null;
+      minPivot = Math.min(minPivot, pivot);
+      maxPivot = Math.max(maxPivot, pivot);
 
       for (let k = i + 1; k < n; k++) {
         const c = -M[k][i] / M[i][i];
@@ -178,7 +226,26 @@ class MalusFitter {
         M[k][n] -= M[k][i] * x[i];
       }
     }
-    return x;
+    return { solution: x, conditionProxy: maxPivot / minPivot };
+  }
+
+  static invertMatrix(A) {
+    const n = A.length;
+    const M = A.map((row, i) => [...row, ...Array.from({ length: n }, (_, j) => i === j ? 1 : 0)]);
+    for (let i = 0; i < n; i++) {
+      let pivotRow = i;
+      for (let r = i + 1; r < n; r++) if (Math.abs(M[r][i]) > Math.abs(M[pivotRow][i])) pivotRow = r;
+      if (Math.abs(M[pivotRow][i]) < 1e-12) return null;
+      [M[i], M[pivotRow]] = [M[pivotRow], M[i]];
+      const pivot = M[i][i];
+      for (let c = 0; c < 2 * n; c++) M[i][c] /= pivot;
+      for (let r = 0; r < n; r++) {
+        if (r === i) continue;
+        const factor = M[r][i];
+        for (let c = 0; c < 2 * n; c++) M[r][c] -= factor * M[i][c];
+      }
+    }
+    return M.map(row => row.slice(n));
   }
 }
 
