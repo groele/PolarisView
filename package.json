@@ -1,0 +1,14 @@
+{
+  "name": "polarisview",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node tests/run-tests.mjs",
+    "test:browser": "node tests/browser-smoke.mjs",
+    "check": "node tests/check-syntax.mjs && node tests/check-html.mjs && npm test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
