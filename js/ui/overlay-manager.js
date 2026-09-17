@@ -855,6 +855,7 @@ class PolarOverlayManager {
 
   updateConfig(newConfig) {
     this.overlayConfig = { ...this.overlayConfig, ...newConfig };
+    if (this.onConfigChange) this.onConfigChange(this.overlayConfig);
     this.requestRender();
   }
 

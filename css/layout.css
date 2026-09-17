@@ -288,6 +288,77 @@ html, body {
   gap: 0.25rem;
 }
 
+/* 对齐偏角控制器集群：滑移模块与输入模块 */
+.overlay-rot-group {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.overlay-rot-slider-wrap {
+  display: inline-flex;
+  align-items: center;
+}
+
+.overlay-rot-slider {
+  width: 80px;
+  height: 4px;
+  cursor: ew-resize;
+  accent-color: var(--primary-500);
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  outline: none;
+  transition: width 0.2s ease, opacity 0.2s ease;
+}
+
+.overlay-rot-slider:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.overlay-rot-input-wrap {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.12rem 0.35rem 0.12rem 0.4rem;
+  gap: 2px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+  transition: all 0.15s ease;
+}
+
+.overlay-rot-input-wrap:focus-within {
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25);
+}
+
+.overlay-rot-number-input {
+  width: 42px;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--primary-600);
+  text-align: right;
+  padding: 0;
+  -moz-appearance: textfield;
+}
+
+.overlay-rot-number-input::-webkit-outer-spin-button,
+.overlay-rot-number-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.overlay-rot-unit {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  user-select: none;
+}
+
 /* 旋转微调步进集群 */
 .overlay-stepper-cluster {
   display: inline-flex;

@@ -698,7 +698,51 @@ class PolarizationApp {
       });
     }
 
-    // 1.3 快捷旋转对齐晶棱控制器
+    // 1.3 快捷旋转对齐晶棱控制器 (滑移模块、直接输入角度与步进微调)
+    const quickRotSlider = document.getElementById('overlayQuickRotSlider');
+    const quickRotInput = document.getElementById('overlayQuickRotInput');
+
+    const handleRotationChange = (rawVal) => {
+      let val = parseFloat(rawVal);
+      if (!Number.isFinite(val)) return;
+      while (val > 180) val -= 360;
+      while (val < -180) val += 360;
+      val = Math.round(val);
+
+      if (quickRotSlider && parseInt(quickRotSlider.value, 10) !== val) {
+        quickRotSlider.value = val;
+      }
+      if (quickRotInput && document.activeElement !== quickRotInput && parseFloat(quickRotInput.value) !== val) {
+        quickRotInput.value = val;
+      }
+      this.overlayManager?.setRotation(val);
+    };
+
+    if (quickRotSlider) {
+      quickRotSlider.addEventListener('input', (e) => {
+        handleRotationChange(e.target.value);
+      });
+    }
+
+    if (quickRotInput) {
+      quickRotInput.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        if (Number.isFinite(val)) {
+          this.overlayManager?.setRotation(val);
+        }
+      });
+      quickRotInput.addEventListener('change', (e) => {
+        handleRotationChange(e.target.value);
+      });
+      quickRotInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleRotationChange(e.target.value);
+          quickRotInput.blur();
+        }
+      });
+    }
+
     const btnRotM5 = document.getElementById('btnOverlayRotM5');
     if (btnRotM5) btnRotM5.addEventListener('click', () => this.overlayManager?.stepRotation(-5));
 
@@ -1051,11 +1095,17 @@ class PolarizationApp {
     const rotEl = document.getElementById('overlayRotation');
     const rotVal = document.getElementById('overlayRotationVal');
     const quickRotLabel = document.getElementById('overlayQuickRotLabel');
+    const quickRotSlider = document.getElementById('overlayQuickRotSlider');
+    const quickRotInput = document.getElementById('overlayQuickRotInput');
     if (cfg.rotation !== undefined) {
       const rot = Math.round(cfg.rotation);
-      if (rotEl) rotEl.value = rot;
+      if (rotEl && parseInt(rotEl.value, 10) !== rot) rotEl.value = rot;
       if (rotVal) rotVal.textContent = `${rot}°`;
       if (quickRotLabel) quickRotLabel.textContent = `${rot}°`;
+      if (quickRotSlider && parseInt(quickRotSlider.value, 10) !== rot) quickRotSlider.value = rot;
+      if (quickRotInput && document.activeElement !== quickRotInput && parseFloat(quickRotInput.value) !== rot) {
+        quickRotInput.value = rot;
+      }
     }
     const opEl = document.getElementById('overlayOpacity');
     const opVal = document.getElementById('overlayOpacityVal');

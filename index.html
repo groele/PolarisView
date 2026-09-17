@@ -813,9 +813,22 @@
                 </button>
               </div>
 
-              <!-- 快捷旋转对齐晶棱控制器 -->
-              <div class="overlay-bar-group overlay-rot-group" title="快捷微调极坐标旋转角 (支持 Shift+滚轮 或 Alt+左键拖拽)">
+              <!-- 快捷旋转对齐晶棱控制器 (支持滑移拖拽、直接输入角度与步进微调) -->
+              <div class="overlay-bar-group overlay-rot-group" title="快捷微调极坐标旋转角 (支持滑移拖拽、直接输入角度、按钮微调或 Shift+滚轮 / Alt+拖拽)">
                 <span class="overlay-group-label"><svg class="ui-icon"><use href="#i-rotate"/></svg>对齐偏角:</span>
+                
+                <!-- 1. 滑移模块 (Range Slider) -->
+                <div class="overlay-rot-slider-wrap">
+                  <input type="range" id="overlayQuickRotSlider" class="overlay-rot-slider" min="-180" max="180" step="1" value="0" title="拖动滑移对齐偏角 (-180° ~ 180°)">
+                </div>
+
+                <!-- 2. 输入角度模块 (Number Input) -->
+                <div class="overlay-rot-input-wrap">
+                  <input type="number" id="overlayQuickRotInput" class="overlay-rot-number-input" min="-180" max="180" step="1" value="0" title="直接输入对齐偏角 (-180° ~ 180°，按回车生效)">
+                  <span class="overlay-rot-unit">°</span>
+                </div>
+
+                <!-- 3. 微调步进集群 -->
                 <div class="overlay-stepper-cluster">
                   <button id="btnOverlayRotM5" class="stepper-btn" type="button" title="逆时针旋转 5°">-5°</button>
                   <button id="btnOverlayRotM1" class="stepper-btn" type="button" title="逆时针微调 1°">-1°</button>

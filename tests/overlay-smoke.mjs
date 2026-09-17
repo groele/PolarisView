@@ -165,6 +165,34 @@ frame.addEventListener('load',async()=>{
   w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'X', bubbles: true }));
   const flipXAfterToggleBack = w.app.overlayManager.imageFilters.flipX;
 
+  // 12. 验证对齐偏角滑移模块 (Slider) 与直接输入框 (Number Input) 双向联动
+  const quickSlider = d.getElementById('overlayQuickRotSlider');
+  const quickInput = d.getElementById('overlayQuickRotInput');
+
+  // 12.1 模拟拖动滑块至 52°
+  quickSlider.value = '52';
+  quickSlider.dispatchEvent(new Event('input', { bubbles: true }));
+  const rotAfterSliderDrag = w.app.overlayManager.overlayConfig.rotation;
+  const inputValAfterSlider = Number(quickInput.value);
+
+  // 12.2 模拟直接在数字输入框中键入 -33° 并触发 change
+  quickInput.value = '-33';
+  quickInput.dispatchEvent(new Event('change', { bubbles: true }));
+  const rotAfterInputChange = w.app.overlayManager.overlayConfig.rotation;
+  const sliderValAfterInput = Number(quickSlider.value);
+
+  // 12.3 模拟点击 +5° 步进按钮，断言滑块与输入框联动更新为 -28°
+  d.getElementById('btnOverlayRotP5').click();
+  const rotAfterStepper = w.app.overlayManager.overlayConfig.rotation;
+  const sliderValAfterStepper = Number(quickSlider.value);
+  const inputValAfterStepper = Number(quickInput.value);
+
+  // 12.4 模拟点击复位按钮，断言滑块与输入框复位为 0°
+  d.getElementById('btnOverlayRotReset').click();
+  const rotAfterReset = w.app.overlayManager.overlayConfig.rotation;
+  const sliderValAfterReset = Number(quickSlider.value);
+  const inputValAfterReset = Number(quickInput.value);
+
   document.getElementById('result').textContent=JSON.stringify({
     activeView,
     overlayVisible,
@@ -215,7 +243,17 @@ frame.addEventListener('load',async()=>{
     sideYAfterClear,
     flipXAfterKey,
     flipYAfterKey,
-    flipXAfterToggleBack
+    flipXAfterToggleBack,
+    rotAfterSliderDrag,
+    inputValAfterSlider,
+    rotAfterInputChange,
+    sliderValAfterInput,
+    rotAfterStepper,
+    sliderValAfterStepper,
+    inputValAfterStepper,
+    rotAfterReset,
+    sliderValAfterReset,
+    inputValAfterReset
   });
 });
 </script>`;
@@ -313,7 +351,19 @@ try {
   assert.equal(res.flipYAfterKey, true);
   assert.equal(res.flipXAfterToggleBack, false);
 
-  console.log('PASS overlay smoke: preset bundle linkage, auto view-switch on upload, Step1 thumbnail preview, click-to-locate, dynamic range, 4K export, quick rotation steppers, HUD drawer, and X/Y mirror flips with shortcuts');
+  // 断言对齐偏角滑移模块与直接输入框双向同步及步进联动
+  assert.equal(res.rotAfterSliderDrag, 52);
+  assert.equal(res.inputValAfterSlider, 52);
+  assert.equal(res.rotAfterInputChange, -33);
+  assert.equal(res.sliderValAfterInput, -33);
+  assert.equal(res.rotAfterStepper, -28);
+  assert.equal(res.sliderValAfterStepper, -28);
+  assert.equal(res.inputValAfterStepper, -28);
+  assert.equal(res.rotAfterReset, 0);
+  assert.equal(res.sliderValAfterReset, 0);
+  assert.equal(res.inputValAfterReset, 0);
+
+  console.log('PASS overlay smoke: preset bundle linkage, auto view-switch on upload, Step1 thumbnail preview, click-to-locate, dynamic range, 4K export, quick rotation steppers, HUD drawer, X/Y mirror flips, and rotation slider/input sync');
 } finally {
   server.close();
 }
