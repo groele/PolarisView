@@ -172,7 +172,7 @@ class PolarOverlayManager {
         // Ctrl + 滚轮平滑缩放底图
         const zoomDelta = e.deltaY < 0 ? 0.05 : -0.05;
         this.imageZoom = Math.max(0.1, Math.min(6.0, parseFloat(((this.imageZoom || 1.0) + zoomDelta).toFixed(3))));
-        this.render();
+        this.requestRender();
       } else if (e.shiftKey) {
         // Shift + 滚轮平滑旋转对齐晶棱
         const rotDelta = e.deltaY < 0 ? 1 : -1;
@@ -182,7 +182,7 @@ class PolarOverlayManager {
         const newScale = Math.max(0.1, Math.min(1.5, this.overlayConfig.scale + delta));
         this.overlayConfig.scale = parseFloat(newScale.toFixed(3));
         if (this.onConfigChange) this.onConfigChange(this.overlayConfig);
-        this.render();
+        this.requestRender();
       }
     }, { passive: false });
 
@@ -249,7 +249,7 @@ class PolarOverlayManager {
           this.overlayConfig.scale = Math.max(0.1, Math.min(1.5, parseFloat((this.initialPinchScale * factor).toFixed(3))));
           if (this.onConfigChange) this.onConfigChange(this.overlayConfig);
         }
-        this.render();
+        this.requestRender();
       }
       return;
     }
@@ -341,7 +341,7 @@ class PolarOverlayManager {
       const dy = (e.clientY - this.panStartY) * scaleFactorY;
       this.imagePanX = Math.round(this.panStartImgX + dx);
       this.imagePanY = Math.round(this.panStartImgY + dy);
-      this.render();
+      this.requestRender();
       return;
     }
 
@@ -354,7 +354,7 @@ class PolarOverlayManager {
       while (newRot < -180) newRot += 360;
       this.overlayConfig.rotation = newRot;
       if (this.onConfigChange) this.onConfigChange(this.overlayConfig);
-      this.render();
+      this.requestRender();
       return;
     }
 
@@ -384,19 +384,21 @@ class PolarOverlayManager {
     this.overlayConfig.offsetY = Math.round(this.dragStartOffsetY + dy);
 
     if (this.onConfigChange) this.onConfigChange(this.overlayConfig);
-    this.render();
+    this.requestRender();
   }
 
   handleMouseUp(e) {
     if (this.isPanningImage) {
       this.isPanningImage = false;
       if (this.canvas) this.canvas.style.cursor = 'grab';
+      this.render();
       return;
     }
 
     if (this.isRotating) {
       this.isRotating = false;
       if (this.canvas) this.canvas.style.cursor = 'grab';
+      this.render();
       return;
     }
 
@@ -419,11 +421,11 @@ class PolarOverlayManager {
           this.overlayConfig.offsetX = Math.round(clickCanvasX - this.canvas.width / 2);
           this.overlayConfig.offsetY = Math.round(clickCanvasY - this.canvas.height / 2);
           if (this.onConfigChange) this.onConfigChange(this.overlayConfig);
-          this.render();
         }
       }
       this.isDragging = false;
       if (this.canvas) this.canvas.style.cursor = 'grab';
+      this.render();
     }
   }
 
@@ -848,16 +850,17 @@ class PolarOverlayManager {
     this.overlayConfig.scale = 0.38;
     this.overlayConfig.rotation = 0;
     if (this.onConfigChange) this.onConfigChange(this.overlayConfig);
+    this.render();
   }
 
   updateConfig(newConfig) {
     this.overlayConfig = { ...this.overlayConfig, ...newConfig };
-    this.render();
+    this.requestRender();
   }
 
   updateFilters(newFilters) {
     this.imageFilters = { ...this.imageFilters, ...newFilters };
-    this.render();
+    this.requestRender();
   }
 
   resize() {
@@ -880,10 +883,31 @@ class PolarOverlayManager {
   }
 
   /**
+   * 基于 requestAnimationFrame 的平滑节能调度例程
+   * 高频交互（鼠标拖拽、滚轮、触屏手势、滑块微调）自动合并为单帧渲染，杜绝 GPU 显存饱和与掉帧
+   */
+  requestRender() {
+    if (this._renderRafId) return;
+    this._renderRafId = requestAnimationFrame(() => {
+      this._renderRafId = null;
+      this.render();
+    });
+  }
+
+  cancelPendingRender() {
+    if (this._renderRafId) {
+      cancelAnimationFrame(this._renderRafId);
+      this._renderRafId = null;
+    }
+  }
+
+  /**
    * 核心重绘例程：高保真呈现极坐标图与按需叠加光学显微图
    * 极坐标图作为第一视觉主体优先呈现，无底图时配合科研暗室网格与学术浮签
    */
   render() {
+    this.cancelPendingRender();
+
     if (!this.canvas && typeof document !== 'undefined') {
       this.canvas = document.getElementById(this.canvasId);
       if (this.canvas) this.ctx = this.canvas.getContext('2d');
@@ -898,6 +922,11 @@ class PolarOverlayManager {
     const width = this.canvas.width || 800;
     const height = this.canvas.height || 600;
 
+    // 严密重置画布 2D 变换矩阵与滤镜状态，杜绝硬件加速下切片渲染残留与黑块 (Black tile clipping)
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.filter = 'none';
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     ctx.clearRect(0, 0, width, height);
 
     // 1. 底图层绘制
@@ -910,10 +939,10 @@ class PolarOverlayManager {
     }
 
     // 2. 计算极坐标图中心坐标与物理半径（始终作为尊享主体呈现）
-    const centerX = width / 2 + this.overlayConfig.offsetX;
-    const centerY = height / 2 + this.overlayConfig.offsetY;
+    const centerX = width / 2 + (this.overlayConfig.offsetX || 0);
+    const centerY = height / 2 + (this.overlayConfig.offsetY || 0);
     const minDim = Math.min(width, height);
-    const radius = minDim * this.overlayConfig.scale;
+    const radius = minDim * (this.overlayConfig.scale || 0.42);
 
     // 3. 绘制极坐标图矢量图层 (无论有无底图，均完整高保真呈现)
     this.drawPolarPlot(ctx, centerX, centerY, radius);
@@ -922,6 +951,10 @@ class PolarOverlayManager {
     if (this.overlayConfig.showBadge) {
       this.drawAcademicBadge(ctx, width, height);
     }
+
+    // 绘制完成后再次显式复位滤镜与变换，杜绝污染外部管道与后续帧
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.filter = 'none';
   }
 
   drawEmptyBackdrop(ctx, width, height) {
@@ -1002,7 +1035,7 @@ class PolarOverlayManager {
 
     ctx.save();
 
-    // 滤镜应用
+    // 滤镜应用与显式复位保护
     const b = this.imageFilters.brightness;
     const c = this.imageFilters.contrast;
     const filters = [];
@@ -1012,6 +1045,8 @@ class PolarOverlayManager {
     if (this.imageFilters.invert) filters.push('invert(100%)');
     if (filters.length > 0) {
       ctx.filter = filters.join(' ');
+    } else {
+      ctx.filter = 'none';
     }
 
     // 等比包含缩放并居中铺满
@@ -1049,6 +1084,9 @@ class PolarOverlayManager {
     const flipY = !!this.imageFilters.flipY;
 
     if (Number.isFinite(drawW) && Number.isFinite(drawH) && drawW > 0 && drawH > 0) {
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+
       if (flipX || flipY) {
         // 以底图视觉中心进行独立 X 轴 (左右) / Y 轴 (上下) 镜像翻转
         ctx.save();
@@ -1060,6 +1098,9 @@ class PolarOverlayManager {
         ctx.drawImage(img, drawX, drawY, drawW, drawH);
       }
     }
+
+    // 必须在退出前显式重置 filter 为 'none'，防止 Chromium Skia 硬件加速显存切片泄漏产生黑块
+    ctx.filter = 'none';
     ctx.restore();
   }
 

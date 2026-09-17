@@ -189,5 +189,53 @@ const p = mockOverlay.polarData.polarFit.params;
 const resolvedTheta = p.thetaMax ?? p.theta0;
 assert.equal(resolvedTheta, 103.2, 'thetaMax must be prioritized over theta0 phase parameter');
 
+// 验证 requestRender 与 cancelPendingRender 调度管理
+let rafCallback = null;
+let rafCancelled = false;
+globalThis.requestAnimationFrame = (cb) => { rafCallback = cb; return 42; };
+globalThis.cancelAnimationFrame = (id) => { if (id === 42) rafCancelled = true; };
+
+mockOverlay._renderRafId = null;
+let renderCount = 0;
+mockOverlay.render = () => { renderCount++; };
+mockOverlay.requestRender();
+assert.equal(mockOverlay._renderRafId, 42);
+assert.equal(renderCount, 0);
+
+// 执行 RAF 回调
+rafCallback();
+assert.equal(mockOverlay._renderRafId, null);
+assert.equal(renderCount, 1);
+
+// 测试取消机制
+mockOverlay.requestRender();
+assert.equal(mockOverlay._renderRafId, 42);
+mockOverlay.cancelPendingRender();
+assert.equal(mockOverlay._renderRafId, null);
+assert.equal(rafCancelled, true);
+
+// 验证 drawBackgroundImage 滤镜生命周期严密复位为 'none'，防止硬件加速显存切片泄漏
+const mockCtx = {
+  save() {},
+  restore() {},
+  setTransform() {},
+  clearRect() {},
+  drawImage() {},
+  scale() {},
+  translate() {},
+  filter: 'none',
+  imageSmoothingEnabled: false,
+  imageSmoothingQuality: 'low'
+};
+mockOverlay.ctx = mockCtx;
+mockOverlay.canvas = { width: 800, height: 600 };
+mockOverlay.image = { naturalWidth: 2592, naturalHeight: 1944 };
+mockOverlay.imageFilters = { brightness: 120, contrast: 110, grayscale: true, invert: false, flipX: true, flipY: true };
+
+mockOverlay.drawBackgroundImage(mockCtx, 800, 600);
+assert.equal(mockCtx.filter, 'none', 'ctx.filter must be explicitly reset to none after drawBackgroundImage');
+assert.equal(mockCtx.imageSmoothingEnabled, true, 'imageSmoothingEnabled must be set to true');
+assert.equal(mockCtx.imageSmoothingQuality, 'high', 'imageSmoothingQuality must be high');
+
 console.log('PASS scientific integrity, parser diagnostics, independent repeats, stable fit, safe defaults, XLSX structure, sample optical overlay preset linkage, and high-contrast HUD enhancements');
 

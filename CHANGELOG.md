@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.1.3 - 2026-09-17
+
+### Fixed
+- **Canvas 2D 硬件加速切片渲染与黑块根治 (Black Tile Clipping Fix)**:
+  - 修复了在导入大尺寸高分辨率光学显微照片（如 2592×1944 px 实拍图）时，Windows Chrome 硬件加速 (Direct3D 11 / Skia) 渲染临时滤波切片显存泄漏的问题。
+  - 在 `drawBackgroundImage` 中引入严密的滤镜显式复位机制，确保绘制完毕后立即恢复 `ctx.filter = 'none'`，并在重绘入口强制重置 `ctx.setTransform(1, 0, 0, 1, 0, 0)` 与 `ctx.filter = 'none'`，彻底阻断切片残留与脏状态污染。
+  - 引入基于 `requestAnimationFrame` 的平滑调度例程 (`requestRender` / `cancelPendingRender`)，将鼠标高频拖拽、滚轮平滑缩放与滑块调节合并为最高 60/120Hz 的单帧渲染，杜绝 GPU 显存队列饱和与掉帧撕裂。
+- **浮动调控层 GPU 混合合成加固 (Compositing Layer Isolation)**:
+  - 将 `.overlay-floating-bar`、`.overlay-quick-hud` 和 `.overlay-drag-hint` 的脆弱毛玻璃 `backdrop-filter` 替换为高保真、抗撕裂的深色防反射实色背景，避免 ANGLE Direct3D 在 Canvas 上方产生图层剪裁黑洞。
+  - 为 `#overlayCanvas` 赋予 `width: 100%; height: 100%; touch-action: none;`，防止画布亚像素缩放间隙与多点触控滚动冲突。
+
 ## v3.1.2 - 2026-09-17
 
 ### Added
