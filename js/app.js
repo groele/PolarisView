@@ -115,6 +115,12 @@ class PolarizationApp {
             if (params.get('loadMicro')) {
               this.overlayManager?.loadPresetBundle(preset || 'real_pol', null, true);
             }
+            if (params.get('flipX') === '1' || params.get('flipX') === 'true') {
+              this.updateOverlayFlipX?.(true);
+            }
+            if (params.get('flipY') === '1' || params.get('flipY') === 'true') {
+              this.updateOverlayFlipY?.(true);
+            }
             if (params.get('hud') || params.get('autotest')) {
               const btnHud = document.getElementById('btnToggleOverlayHud');
               if (btnHud) btnHud.click();
@@ -604,6 +610,8 @@ class PolarizationApp {
     if (btnClear) {
       btnClear.addEventListener('click', () => {
         this.overlayManager?.clearImage();
+        this.updateOverlayFlipX?.(false);
+        this.updateOverlayFlipY?.(false);
       });
     }
 
@@ -611,6 +619,75 @@ class PolarizationApp {
     if (btnResetPos) {
       btnResetPos.addEventListener('click', () => {
         this.overlayManager?.locateOnTargetFlake();
+      });
+    }
+
+    // 1.25 轴向镜像翻转状态统一调度 (X 轴左右 / Y 轴上下)
+    this.updateOverlayFlipX = (val) => {
+      const boolVal = Boolean(val);
+      const chkSide = document.getElementById('overlayFlipX');
+      const chkHud = document.getElementById('hudChkFlipX');
+      const btnFloat = document.getElementById('btnOverlayFlipX');
+      if (chkSide) chkSide.checked = boolVal;
+      if (chkHud) chkHud.checked = boolVal;
+      if (btnFloat) btnFloat.classList.toggle('active', boolVal);
+      this.overlayManager?.updateFilters({ flipX: boolVal });
+    };
+
+    this.updateOverlayFlipY = (val) => {
+      const boolVal = Boolean(val);
+      const chkSide = document.getElementById('overlayFlipY');
+      const chkHud = document.getElementById('hudChkFlipY');
+      const btnFloat = document.getElementById('btnOverlayFlipY');
+      if (chkSide) chkSide.checked = boolVal;
+      if (chkHud) chkHud.checked = boolVal;
+      if (btnFloat) btnFloat.classList.toggle('active', boolVal);
+      this.overlayManager?.updateFilters({ flipY: boolVal });
+    };
+
+    const btnFlipX = document.getElementById('btnOverlayFlipX');
+    if (btnFlipX) {
+      btnFlipX.addEventListener('click', () => {
+        const next = !this.overlayManager?.imageFilters?.flipX;
+        this.updateOverlayFlipX(next);
+        this.showOverlayToast(`已${next ? '开启' : '关闭'} X 轴水平镜像 (左右翻转)`);
+      });
+    }
+
+    const btnFlipY = document.getElementById('btnOverlayFlipY');
+    if (btnFlipY) {
+      btnFlipY.addEventListener('click', () => {
+        const next = !this.overlayManager?.imageFilters?.flipY;
+        this.updateOverlayFlipY(next);
+        this.showOverlayToast(`已${next ? '开启' : '关闭'} Y 轴垂直镜像 (上下翻转)`);
+      });
+    }
+
+    const chkSideFlipX = document.getElementById('overlayFlipX');
+    if (chkSideFlipX) {
+      chkSideFlipX.addEventListener('change', (e) => {
+        this.updateOverlayFlipX(e.target.checked);
+      });
+    }
+
+    const chkSideFlipY = document.getElementById('overlayFlipY');
+    if (chkSideFlipY) {
+      chkSideFlipY.addEventListener('change', (e) => {
+        this.updateOverlayFlipY(e.target.checked);
+      });
+    }
+
+    const chkHudFlipX = document.getElementById('hudChkFlipX');
+    if (chkHudFlipX) {
+      chkHudFlipX.addEventListener('change', (e) => {
+        this.updateOverlayFlipX(e.target.checked);
+      });
+    }
+
+    const chkHudFlipY = document.getElementById('hudChkFlipY');
+    if (chkHudFlipY) {
+      chkHudFlipY.addEventListener('change', (e) => {
+        this.updateOverlayFlipY(e.target.checked);
       });
     }
 
@@ -756,10 +833,12 @@ class PolarizationApp {
         .forEach(b => b.classList.remove('active'));
       if (btn) btn.classList.add('active');
 
-      let filters = { brightness: 100, contrast: 100, grayscale: false, invert: false };
-      if (mode === 'contrast') filters = { brightness: 105, contrast: 155, grayscale: false, invert: false };
-      else if (mode === 'gray') filters = { brightness: 100, contrast: 105, grayscale: true, invert: false };
-      else if (mode === 'invert') filters = { brightness: 100, contrast: 100, grayscale: false, invert: true };
+      const curFlipX = Boolean(this.overlayManager?.imageFilters?.flipX);
+      const curFlipY = Boolean(this.overlayManager?.imageFilters?.flipY);
+      let filters = { brightness: 100, contrast: 100, grayscale: false, invert: false, flipX: curFlipX, flipY: curFlipY };
+      if (mode === 'contrast') filters = { brightness: 105, contrast: 155, grayscale: false, invert: false, flipX: curFlipX, flipY: curFlipY };
+      else if (mode === 'gray') filters = { brightness: 100, contrast: 105, grayscale: true, invert: false, flipX: curFlipX, flipY: curFlipY };
+      else if (mode === 'invert') filters = { brightness: 100, contrast: 100, grayscale: false, invert: true, flipX: curFlipX, flipY: curFlipY };
 
       // 同步到侧边栏
       const bEl = document.getElementById('overlayBrightness');
@@ -1072,6 +1151,8 @@ class PolarizationApp {
       if (uploadZone) uploadZone.style.display = 'block';
       if (previewCard) previewCard.style.display = 'none';
       if (thumbImg) thumbImg.src = '';
+      this.updateOverlayFlipX?.(false);
+      this.updateOverlayFlipY?.(false);
     }
   }
 

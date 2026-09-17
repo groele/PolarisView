@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.1.1 - 2026-09-17
+
+### Added
+- Independent X-axis (horizontal) and Y-axis (vertical) optical micrograph mirroring options for the sample overlay view.
+- Support for physical optical setups: inverted microscope camera mountings, reflected light paths, and prism-induced image reversals.
+- Three synchronized control surfaces: Stage floating toolbar buttons (`#btnOverlayFlipX`, `#btnOverlayFlipY`), Quick HUD drawer toggles (`#hudChkFlipX`, `#hudChkFlipY`), and Sidebar panel checkboxes (`#overlayFlipX`, `#overlayFlipY`).
+- In-place centered scale transformations (`scale(-1, 1)` and `scale(1, -1)`) around optical micrograph center without distorting the polar coordinate system, degree markers, or fast-axis vectors.
+- Automated reset of mirror flip toggles on micrograph clearance and filter mode preservation during image processing adjustments.
+- URL deep-link parameter support (`?flipX=1&flipY=1`) for shareable and reproducible microscope overlay configurations.
+- Automated end-to-end regression tests covering mirror state transitions, multi-surface synchronization, and 4K publication export compatibility.
+
 ## v3.1.0 - 2026-09-17
 
 ### Added

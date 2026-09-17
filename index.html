@@ -39,6 +39,8 @@
     <symbol id="i-palette" viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r="1"/><circle cx="17.5" cy="10.5" r="1"/><circle cx="8.5" cy="7.5" r="1"/><circle cx="6.5" cy="12.5" r="1"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.5-.7 1.5-1.5 0-.4-.1-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.8.7-1.5 1.5-1.5H16c3.3 0 6-2.7 6-6 0-5.5-4.5-9.8-10-9.8z"/></symbol>
     <symbol id="i-sliders" viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></symbol>
     <symbol id="i-dock" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/></symbol>
+    <symbol id="i-flip-x" viewBox="0 0 24 24"><path d="M12 3v18M7 7l-5 5 5 5V7zM17 7l5 5-5 5V7z"/></symbol>
+    <symbol id="i-flip-y" viewBox="0 0 24 24"><path d="M3 12h18M7 7l5-5 5 5H7zM7 17l5 5 5-5H7z"/></symbol>
   </svg>
   <div class="app-container">
     <!-- 顶部导航栏 -->
@@ -528,7 +530,15 @@
                   <input type="range" id="overlayContrast" class="range-slider" min="50" max="200" step="5" value="100">
                 </div>
               </div>
-              <div class="form-group" style="display:flex;gap:0.8rem;margin-top:0.4rem;">
+              <div class="form-group" style="display:flex;gap:0.7rem;margin-top:0.4rem;flex-wrap:wrap;">
+                <label style="display:flex;align-items:center;gap:0.3rem;font-size:0.75rem;cursor:pointer;" title="水平翻转底图 (适配反射式光路)">
+                  <input type="checkbox" id="overlayFlipX">
+                  <span>X 轴水平镜像</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:0.3rem;font-size:0.75rem;cursor:pointer;" title="垂直翻转底图 (适配相机倒置安装)">
+                  <input type="checkbox" id="overlayFlipY">
+                  <span>Y 轴垂直镜像</span>
+                </label>
                 <label style="display:flex;align-items:center;gap:0.3rem;font-size:0.75rem;cursor:pointer;">
                   <input type="checkbox" id="overlayGrayscale">
                   <span>黑白灰度</span>
@@ -795,6 +805,12 @@
                 <button id="btnOverlayResetPos" class="btn btn-secondary btn-sm" type="button" title="将极坐标图精准对准到样品晶片/激光斑中心 (快捷键 R)">
                   <svg class="ui-icon"><use href="#i-vector"/></svg>对准微区中心
                 </button>
+                <button id="btnOverlayFlipX" class="btn btn-secondary btn-sm" type="button" title="水平镜像翻转光学底图 (X轴左右镜像，适配反射式显微镜光路)">
+                  <svg class="ui-icon"><use href="#i-flip-x"/></svg>X 镜像
+                </button>
+                <button id="btnOverlayFlipY" class="btn btn-secondary btn-sm" type="button" title="垂直镜像翻转光学底图 (Y轴上下镜像，适配相机倒置安装)">
+                  <svg class="ui-icon"><use href="#i-flip-y"/></svg>Y 镜像
+                </button>
               </div>
 
               <!-- 快捷旋转对齐晶棱控制器 -->
@@ -896,6 +912,15 @@
                       <button id="btnHudFilterContrast" class="hud-theme-pill">微区高对比</button>
                       <button id="btnHudFilterGray" class="hud-theme-pill">单色灰度</button>
                       <button id="btnHudFilterInvert" class="hud-theme-pill">暗场反相</button>
+                    </div>
+                  </div>
+
+                  <!-- 6. 显微图像轴向镜像 (适配反射光路与相机倒置) -->
+                  <div class="hud-section">
+                    <div class="hud-label"><svg class="ui-icon"><use href="#i-flip-x"/></svg>显微图像轴向镜像翻转</div>
+                    <div class="hud-chips-grid">
+                      <label class="hud-chip"><input type="checkbox" id="hudChkFlipX"><span>水平镜像 (X 轴左右)</span></label>
+                      <label class="hud-chip"><input type="checkbox" id="hudChkFlipY"><span>垂直镜像 (Y 轴上下)</span></label>
                     </div>
                   </div>
                 </div>

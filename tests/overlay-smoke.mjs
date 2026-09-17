@@ -123,6 +123,40 @@ frame.addEventListener('load',async()=>{
   const cardHasFullscreen = d.getElementById('overlayChartCard').classList.contains('is-fullscreen');
   d.getElementById('btnOverlayFullscreen').click(); // toggle back
 
+  // 11. 验证 X 轴 (水平) 与 Y 轴 (垂直) 镜像翻转控制与多端同步
+  const btnFlipX = d.getElementById('btnOverlayFlipX');
+  const btnFlipY = d.getElementById('btnOverlayFlipY');
+  const chkSideX = d.getElementById('overlayFlipX');
+  const chkSideY = d.getElementById('overlayFlipY');
+  const chkHudX = d.getElementById('hudChkFlipX');
+  const chkHudY = d.getElementById('hudChkFlipY');
+
+  // 11.1 点击快捷工具栏 X 镜像按钮
+  btnFlipX.click();
+  const flipXAfterBtn = w.app.overlayManager.imageFilters.flipX;
+  const sideXAfterBtn = chkSideX.checked;
+  const hudXAfterBtn = chkHudX.checked;
+  const btnXHasActive = btnFlipX.classList.contains('active');
+
+  // 11.2 勾选 HUD 面板 Y 镜像复选框
+  chkHudY.click();
+  const flipYAfterHud = w.app.overlayManager.imageFilters.flipY;
+  const sideYAfterHud = chkSideY.checked;
+  const btnYHasActive = btnFlipY.classList.contains('active');
+
+  // 11.3 切换滤镜模式 (如单色灰度)，验证镜像状态持续保持
+  d.getElementById('btnHudFilterGray').click();
+  const flipXAfterFilter = w.app.overlayManager.imageFilters.flipX;
+  const flipYAfterFilter = w.app.overlayManager.imageFilters.flipY;
+  const isGrayActive = w.app.overlayManager.imageFilters.grayscale;
+
+  // 11.4 点击清除底图，验证镜像状态自动复位
+  d.getElementById('btnOverlayClearImg').click();
+  const flipXAfterClear = w.app.overlayManager.imageFilters.flipX;
+  const flipYAfterClear = w.app.overlayManager.imageFilters.flipY;
+  const sideXAfterClear = chkSideX.checked;
+  const sideYAfterClear = chkSideY.checked;
+
   document.getElementById('result').textContent=JSON.stringify({
     activeView,
     overlayVisible,
@@ -156,7 +190,21 @@ frame.addEventListener('load',async()=>{
     hudVisible,
     themeAfterClick,
     cornerAfterClick,
-    cardHasFullscreen
+    cardHasFullscreen,
+    flipXAfterBtn,
+    sideXAfterBtn,
+    hudXAfterBtn,
+    btnXHasActive,
+    flipYAfterHud,
+    sideYAfterHud,
+    btnYHasActive,
+    flipXAfterFilter,
+    flipYAfterFilter,
+    isGrayActive,
+    flipXAfterClear,
+    flipYAfterClear,
+    sideXAfterClear,
+    sideYAfterClear
   });
 });
 </script>`;
@@ -230,7 +278,26 @@ try {
   assert.equal(res.cornerAfterClick, 'top-left');
   assert.equal(res.cardHasFullscreen, true);
 
-  console.log('PASS overlay smoke: preset bundle linkage, auto view-switch on upload, Step1 thumbnail preview, click-to-locate, dynamic range, 4K export, quick rotation steppers, and HUD drawer');
+  // 断言 X/Y 轴独立镜像翻转、多端双向同步与滤镜联动保持
+  assert.equal(res.flipXAfterBtn, true);
+  assert.equal(res.sideXAfterBtn, true);
+  assert.equal(res.hudXAfterBtn, true);
+  assert.equal(res.btnXHasActive, true);
+
+  assert.equal(res.flipYAfterHud, true);
+  assert.equal(res.sideYAfterHud, true);
+  assert.equal(res.btnYHasActive, true);
+
+  assert.equal(res.flipXAfterFilter, true);
+  assert.equal(res.flipYAfterFilter, true);
+  assert.equal(res.isGrayActive, true);
+
+  assert.equal(res.flipXAfterClear, false);
+  assert.equal(res.flipYAfterClear, false);
+  assert.equal(res.sideXAfterClear, false);
+  assert.equal(res.sideYAfterClear, false);
+
+  console.log('PASS overlay smoke: preset bundle linkage, auto view-switch on upload, Step1 thumbnail preview, click-to-locate, dynamic range, 4K export, quick rotation steppers, HUD drawer, and X/Y mirror flips');
 } finally {
   server.close();
 }

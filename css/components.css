@@ -47,6 +47,19 @@
   border-color: var(--primary-500);
 }
 
+.btn-secondary.active {
+  background: var(--primary-600);
+  color: #ffffff;
+  border-color: var(--primary-600);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2), 0 2px 6px rgba(37, 99, 235, 0.35);
+}
+
+.btn-secondary.active:hover {
+  background: var(--primary-700);
+  border-color: var(--primary-700);
+  color: #ffffff;
+}
+
 .btn-ghost {
   background: transparent;
   color: var(--text-muted);

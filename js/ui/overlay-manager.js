@@ -20,7 +20,9 @@ class PolarOverlayManager {
       brightness: 100, // 50% - 150%
       contrast: 100,   // 50% - 200%
       grayscale: false,
-      invert: false
+      invert: false,
+      flipX: false,    // 水平镜像翻转 (适配反射式显微镜光路)
+      flipY: false     // 垂直镜像翻转 (适配相机倒置安装)
     };
 
     this.currentPresetKey = 'real_pol';
@@ -734,8 +736,28 @@ class PolarOverlayManager {
     this.imagePanX = 0;
     this.imagePanY = 0;
     this.imageZoom = 1.0;
+    this.imageFilters.flipX = false;
+    this.imageFilters.flipY = false;
     this.render();
     if (this.onImageLoaded) this.onImageLoaded('', 0, 0, null);
+  }
+
+  setFlip(flipX, flipY) {
+    if (typeof flipX === 'boolean') this.imageFilters.flipX = flipX;
+    if (typeof flipY === 'boolean') this.imageFilters.flipY = flipY;
+    this.render();
+  }
+
+  toggleFlipX() {
+    this.imageFilters.flipX = !this.imageFilters.flipX;
+    this.render();
+    return this.imageFilters.flipX;
+  }
+
+  toggleFlipY() {
+    this.imageFilters.flipY = !this.imageFilters.flipY;
+    this.render();
+    return this.imageFilters.flipY;
   }
 
   resetOverlayPosition() {
@@ -941,8 +963,20 @@ class PolarOverlayManager {
     const drawX = centerX - drawW / 2;
     const drawY = centerY - drawH / 2;
 
-    if (Number.isFinite(drawX) && Number.isFinite(drawY) && Number.isFinite(drawW) && Number.isFinite(drawH)) {
-      ctx.drawImage(img, drawX, drawY, drawW, drawH);
+    const flipX = !!this.imageFilters.flipX;
+    const flipY = !!this.imageFilters.flipY;
+
+    if (Number.isFinite(drawW) && Number.isFinite(drawH) && drawW > 0 && drawH > 0) {
+      if (flipX || flipY) {
+        // 以底图视觉中心进行独立 X 轴 (左右) / Y 轴 (上下) 镜像翻转
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+        ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+        ctx.restore();
+      } else if (Number.isFinite(drawX) && Number.isFinite(drawY)) {
+        ctx.drawImage(img, drawX, drawY, drawW, drawH);
+      }
     }
     ctx.restore();
   }
