@@ -145,17 +145,52 @@ class MalusFitter {
     const outlierThreshold = 2.5 * (rmse || 1);
     const outliers = fittedPoints.filter(fp => Math.abs(fp.residual) > outlierThreshold);
 
-    // 360 点稠密理论拟合曲线
+    // 360 点稠密理论拟合曲线与最大值角度精密搜寻
     const denseFitCurve = [];
+    let fitMaxY = -Infinity;
+    let fitMaxAngle = theta0;
+    let fitMinY = Infinity;
+    let fitMinAngle = (theta0 + 45) % 90;
+
     for (let deg = 0; deg <= 360; deg += 1) {
       const rad = (deg * Math.PI) / 180;
       const y = A0 + A4 * Math.cos(4 * rad) + B4 * Math.sin(4 * rad) + A2 * Math.cos(2 * rad) + B2 * Math.sin(2 * rad);
-      denseFitCurve.push([deg, Math.max(0, Number(y.toFixed(2)))]);
+      const yVal = Math.max(0, Number(y.toFixed(2)));
+      denseFitCurve.push([deg, yVal]);
+      if (deg < 360) {
+        if (y > fitMaxY) {
+          fitMaxY = y;
+          fitMaxAngle = deg;
+        }
+        if (y < fitMinY) {
+          fitMinY = y;
+          fitMinAngle = deg;
+        }
+      }
     }
+
+    // 在最大值附近进行 0.1° 精密步进微调
+    let refinedMaxY = fitMaxY;
+    let refinedMaxAngle = fitMaxAngle;
+    for (let offset = -2.0; offset <= 2.0; offset += 0.1) {
+      const curDeg = fitMaxAngle + offset;
+      const rad = (curDeg * Math.PI) / 180;
+      const y = A0 + A4 * Math.cos(4 * rad) + B4 * Math.sin(4 * rad) + A2 * Math.cos(2 * rad) + B2 * Math.sin(2 * rad);
+      if (y > refinedMaxY) {
+        refinedMaxY = y;
+        refinedMaxAngle = curDeg;
+      }
+    }
+    const thetaMax = ((refinedMaxAngle % 360) + 360) % 360;
 
     return {
       params: {
         theta0: Number(theta0.toFixed(2)),
+        theta0Deg: Number(theta0.toFixed(2)),
+        thetaMax: Number(thetaMax.toFixed(2)),
+        thetaMaxDeg: Number(thetaMax.toFixed(2)),
+        fitMaxIntensity: Number(Math.max(0, refinedMaxY).toFixed(2)),
+        fitMinIntensity: Number(Math.max(0, fitMinY).toFixed(2)),
         theta0SE: Number(thetaSE.toFixed(3)),
         theta0CI95: thetaCI95.map(value => Number(value.toFixed(3))),
         rSquared: Number(rSquared.toFixed(5)),

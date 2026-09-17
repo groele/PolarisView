@@ -30,7 +30,11 @@ frame.addEventListener('load',async()=>{
   const blank={values:['ribbonDolp','ribbonER','ribbonTheta','ribbonR2','ribbonBg','ribbonModulation','ribbonRmse'].map(id=>d.getElementById(id).textContent),disabled:d.getElementById('btnExportXlsx').disabled,emptyVisible:getComputedStyle(d.getElementById('emptyWorkspaceState')).display!=='none'};
   const input=d.getElementById('rawDataInput'); input.value=${JSON.stringify(sample)}; input.dispatchEvent(new Event('input',{bubbles:true}));
   await new Promise(r=>setTimeout(r,800));
-  const analysed={groups:w.app.parsedState.groups.map(g=>g.points.length),reused:w.app.parsedState.qualityAudit.reusedSourcePoints,level:w.app.parsedState.qualityAudit.claimLevel,mode:w.app.parsedState.provenance.analysisMode,baseline:w.app.parsedState.provenance.baseline.algorithm,reportable:w.app.parsedState.isReportable,exportEnabled:!d.getElementById('btnExportXlsx').disabled};
+  const overlayBtn=d.querySelector('[data-view="overlay"]');
+  overlayBtn.click();
+  await new Promise(r=>setTimeout(r,300));
+  const overlayActive=getComputedStyle(d.getElementById('overlayChartCard')).display==='flex'&&w.app.activeView==='overlay'&&Boolean(w.app.overlayManager?.polarData);
+  const analysed={groups:w.app.parsedState.groups.map(g=>g.points.length),reused:w.app.parsedState.qualityAudit.reusedSourcePoints,level:w.app.parsedState.qualityAudit.claimLevel,mode:w.app.parsedState.provenance.analysisMode,baseline:w.app.parsedState.provenance.baseline.algorithm,reportable:w.app.parsedState.isReportable,exportEnabled:!d.getElementById('btnExportXlsx').disabled,overlayActive};
   document.getElementById('result').textContent=JSON.stringify({blank,analysed}); document.title='POLARISVIEW_TEST_DONE';
 });
 </script>`;
@@ -76,7 +80,8 @@ try {
   assert.equal(result.analysed.baseline, 'none');
   assert.equal(result.analysed.reportable, true);
   assert.equal(result.analysed.exportEnabled, true);
-  console.log('PASS browser: honest empty state and independent-cycle analysis flow');
+  assert.equal(result.analysed.overlayActive, true);
+  console.log('PASS browser: honest empty state, independent-cycle analysis, and sample overlay view');
 } finally {
   server.close();
 }

@@ -92,15 +92,28 @@ class PolarChartManager {
     return themes[this.journalTheme] || themes.nature;
   }
 
-  getDolpReferenceRings(summary, fitResult) {
-    const c = fitResult?.params?.coeffs;
-    const modulation = c ? Math.sqrt(c.A4 * c.A4 + c.B4 * c.B4) : null;
-    const min = c && modulation !== null ? Math.max(0, c.A0 - modulation) : summary.minIntensity;
-    const max = c && modulation !== null ? c.A0 + modulation : summary.maxIntensity;
+  getDolpExtrema(summary, fitResult) {
+    if (fitResult?.denseFitCurve?.length) {
+      const fitPoints = fitResult.denseFitCurve
+        .map(([angle, value]) => ({ angle, value: Number(value) }))
+        .filter(point => Number.isFinite(point.angle) && Number.isFinite(point.value));
+      if (fitPoints.length) {
+        const minPoint = fitPoints.reduce((a, b) => b.value < a.value ? b : a);
+        const maxPoint = fitPoints.reduce((a, b) => b.value > a.value ? b : a);
+        return [
+          { value: Number(Math.max(0, minPoint.value).toFixed(2)), angle: Number(minPoint.angle.toFixed(1)), label: 'Imin' },
+          { value: Number(Math.max(0, maxPoint.value).toFixed(2)), angle: Number(maxPoint.angle.toFixed(1)), label: 'Imax' }
+        ];
+      }
+    }
     return [
-      { value: Number(min.toFixed(2)), label: 'Imin' },
-      { value: Number(max.toFixed(2)), label: 'Imax' }
+      { value: Number(summary.minIntensity.toFixed(2)), angle: Number(summary.minAngle.toFixed(1)), label: 'Imin' },
+      { value: Number(summary.maxIntensity.toFixed(2)), angle: Number(summary.maxAngle.toFixed(1)), label: 'Imax' }
     ].filter(item => Number.isFinite(item.value) && item.value >= 0);
+  }
+
+  getDolpReferenceRings(summary, fitResult) {
+    return this.getDolpExtrema(summary, fitResult);
   }
 
   resize() {
@@ -269,11 +282,49 @@ class PolarChartManager {
     const polarSeries = [];
     const legendData = [];
     (reportable ? this.getDolpReferenceRings(summary, fitResult) : []).forEach(ref => {
+      const isMax = ref.label === 'Imax';
       polarSeries.push({
         name: `Indicator ${ref.label} reference`, type: 'line', coordinateSystem: 'polar',
         showSymbol: false, silent: true, data: Array.from({ length: 37 }, (_, i) => [ref.value, i * 10]),
-        lineStyle: { color: '#94a3b8', width: 1, type: 'dashed', opacity: 0.5 }, z: 0
+        lineStyle: { color: isMax ? (this.journalTheme === 'dark_lab' ? '#f87171' : '#dc2626') : '#64748b', width: isMax ? 1.5 : 1.2, type: 'dashed', opacity: isMax ? 0.75 : 0.65 },
+        markPoint: {
+          silent: true,
+          symbol: 'circle',
+          symbolSize: isMax ? 9 : 7,
+          itemStyle: { color: isMax ? '#dc2626' : '#2563eb' },
+          label: {
+            show: true,
+            formatter: isMax
+              ? `拟合最大值 Imax = ${ref.value}\n【θmax = ${ref.angle}°】`
+              : `${ref.label} = ${ref.value}\n(θ = ${ref.angle}°)`,
+            position: isMax ? 'top' : 'right',
+            fontSize: isMax ? 10.5 : 9.5,
+            fontWeight: isMax ? 'bold' : 'normal',
+            color: isMax ? (this.journalTheme === 'dark_lab' ? '#fca5a5' : '#b91c1c') : '#475569',
+            backgroundColor: this.journalTheme === 'dark_lab' ? 'rgba(15, 23, 42, 0.88)' : 'rgba(255, 255, 255, 0.9)',
+            borderColor: isMax ? '#dc2626' : '#94a3b8',
+            borderWidth: 1,
+            borderRadius: 4,
+            padding: [2, 5]
+          },
+          data: [{ coord: [ref.value, ref.angle] }]
+        },
+        z: isMax ? 9 : 0
       });
+
+      // 拟合最大值方向的极坐标高亮射线
+      if (isMax && Number.isFinite(ref.angle)) {
+        polarSeries.push({
+          name: `拟合最大值偏角 θmax (${ref.angle}°)`,
+          type: 'line',
+          coordinateSystem: 'polar',
+          data: [[0, ref.angle], [rMax * 1.03, ref.angle]],
+          lineStyle: { color: this.journalTheme === 'dark_lab' ? '#f87171' : '#dc2626', width: 2, type: 'dashed' },
+          showSymbol: false,
+          silent: true,
+          z: 8
+        });
+      }
     });
 
     // 误差阴影带
@@ -412,7 +463,7 @@ class PolarChartManager {
       title: {
         text: '1/2波片偏振极坐标空间分布图 (Polar Intensity Distribution)',
         subtext: reportable
-          ? `调制度代理: ${dolpDisplay}% | Imin/Imax 参考环 | 消光比: ${summary.extinctionRatio} (${summary.extinctionRatioDB} dB) | 主轴偏角 θ₀: ${fitResult ? fitResult.params.theta0 : '-'}° | 拟合 R²: ${fitResult ? fitResult.params.rSquaredPercent : '-'}%`
+          ? `调制度代理: ${dolpDisplay}% | Imin/Imax 参考环 | 消光比: ${summary.extinctionRatio} (${summary.extinctionRatioDB} dB) | 拟合最大值偏角 θmax: ${fitResult ? (fitResult.params.thetaMax ?? fitResult.params.theta0) : (summary ? summary.maxAngle : '-')}° | 拟合 R²: ${fitResult ? fitResult.params.rSquaredPercent : '-'}%`
           : '质量门已阻止物理指标输出；曲线仅供数据诊断',
         left: 'center',
         top: 6,
@@ -486,6 +537,82 @@ class PolarChartManager {
       });
     });
 
+    if (reportable) {
+      const extrema = this.getDolpExtrema(summary, fitResult);
+      const angleLabels = new Set(angles);
+      const extremaWithAxisAngle = extrema.map(ref => {
+        const nearest = stepStats.length ? stepStats.reduce((best, point) =>
+          Math.abs(point.relAngle - ref.angle) < Math.abs(best.relAngle - ref.angle) ? point : best, stepStats[0]) : null;
+        return { ...ref, axisAngle: nearest ? nearest.relAngle : ref.angle };
+      });
+      const guideData = extremaWithAxisAngle.flatMap(ref => {
+        const angleLabel = `${ref.axisAngle}°`;
+        const isMax = ref.label === 'Imax';
+        return [
+          {
+            yAxis: ref.value,
+            lineStyle: { color: isMax ? '#dc2626' : '#2563eb', type: 'dashed', width: isMax ? 1.5 : 1.2 },
+            label: {
+              show: true,
+              formatter: isMax ? `拟合最大值 Imax = ${ref.value}` : `${ref.label} = ${ref.value}`,
+              position: 'insideEndTop',
+              fontWeight: isMax ? 'bold' : 'normal',
+              color: isMax ? '#b91c1c' : '#2563eb'
+            }
+          },
+          ...(angleLabels.has(angleLabel) ? [{
+            xAxis: angleLabel,
+            lineStyle: { color: isMax ? '#dc2626' : '#2563eb', type: 'dashed', width: isMax ? 1.5 : 1.2 },
+            label: {
+              show: true,
+              formatter: isMax ? `最大值偏角\nθmax = ${ref.angle}°` : `θ = ${ref.angle}°`,
+              position: 'insideEndTop',
+              fontWeight: isMax ? 'bold' : 'normal',
+              color: isMax ? '#b91c1c' : '#2563eb'
+            }
+          }] : [])
+        ];
+      });
+      cartesianSeries.push({
+        name: 'DoLP 极值引导线',
+        type: 'line',
+        data: [],
+        silent: true,
+        markLine: { silent: true, symbol: 'none', data: guideData },
+        markPoint: {
+          silent: true,
+          symbol: 'circle',
+          symbolSize: 9,
+          data: extremaWithAxisAngle
+            .filter(ref => angleLabels.has(`${ref.axisAngle}°`))
+            .map(ref => {
+              const isMax = ref.label === 'Imax';
+              return {
+                coord: [`${ref.axisAngle}°`, ref.value],
+                value: `${ref.label} = ${ref.value}`,
+                itemStyle: { color: isMax ? '#dc2626' : '#2563eb' },
+                label: {
+                  show: true,
+                  formatter: isMax
+                    ? `拟合最大值: ${ref.value}\n【θmax = ${ref.angle}°】`
+                    : `${ref.label} = ${ref.value}\n(θ = ${ref.angle}°)`,
+                  position: isMax ? 'top' : 'bottom',
+                  color: isMax ? (this.journalTheme === 'dark_lab' ? '#fca5a5' : '#b91c1c') : '#334155',
+                  fontWeight: isMax ? 'bold' : 'normal',
+                  fontSize: 10.5,
+                  backgroundColor: this.journalTheme === 'dark_lab' ? 'rgba(15, 23, 42, 0.88)' : 'rgba(255, 255, 255, 0.9)',
+                  borderColor: isMax ? '#dc2626' : '#94a3b8',
+                  borderWidth: 1,
+                  borderRadius: 4,
+                  padding: [2, 5]
+                }
+              };
+            })
+        },
+        z: 10
+      });
+    }
+
     legendList.push('均值 (Mean)');
     cartesianSeries.push({
       name: '均值 (Mean)',
@@ -534,7 +661,7 @@ class PolarChartManager {
     const cartesianOption = {
       title: {
         text: '直角坐标角度-光强响应曲线 (Cartesian Plot)',
-        subtext: reportable ? `调制度代理: ${dolpDisplay}% | 消光比: ${summary.extinctionRatio} | 调制度: ${summary.modulationPercent}%` : '质量门已阻止物理指标输出；曲线仅供数据诊断',
+        subtext: reportable ? `调制度代理: ${dolpDisplay}% | 拟合最大值偏角 θmax: ${fitResult ? (fitResult.params.thetaMax ?? fitResult.params.theta0) : (summary ? summary.maxAngle : '-')}° | 消光比: ${summary.extinctionRatio} | 调制度: ${summary.modulationPercent}%` : '质量门已阻止物理指标输出；曲线仅供数据诊断',
         left: 'center',
         top: 8,
         textStyle: { fontSize: 13, fontWeight: '700' },
@@ -675,10 +802,26 @@ class PolarChartManager {
     const comboSeries = [];
 
     this.getDolpReferenceRings(summary, fitResult).forEach(ref => {
+      const isMax = ref.label === 'Imax';
       comboSeries.push({
         name: `DoLP ${ref.label} reference`, type: 'line', coordinateSystem: 'polar', polarIndex: 0,
         showSymbol: false, silent: true, data: Array.from({ length: 37 }, (_, i) => [ref.value, i * 10]),
-        lineStyle: { color: '#94a3b8', width: 1, type: 'dashed', opacity: 0.5 }, z: 0
+        lineStyle: { color: isMax ? '#dc2626' : '#94a3b8', width: isMax ? 1.5 : 1, type: 'dashed', opacity: isMax ? 0.75 : 0.5 },
+        markPoint: {
+          silent: true,
+          symbol: 'circle',
+          symbolSize: isMax ? 8 : 6,
+          itemStyle: { color: isMax ? '#dc2626' : '#2563eb' },
+          label: {
+            show: true,
+            formatter: isMax ? `θmax = ${ref.angle}°\n(${ref.value})` : `${ref.label} = ${ref.value}`,
+            position: 'top',
+            fontSize: 9.5,
+            color: isMax ? '#b91c1c' : '#475569'
+          },
+          data: [{ coord: [ref.value, ref.angle] }]
+        },
+        z: isMax ? 8 : 0
       });
     });
 
@@ -941,6 +1084,13 @@ class PolarChartManager {
   }
 
   async exportImage(chartType = 'polar', format = 'png', pixelRatio = 3) {
+    if (chartType === 'overlay') {
+      if (window.app?.overlayManager) {
+        await window.app.overlayManager.exportOverlayImage({ format, scale: pixelRatio });
+      }
+      return;
+    }
+
     if (chartType === 'dual') {
       const pChart = this.getChartInstance(this.polarDomId);
       const bChart = this.getChartInstance(this.baselineDomId);

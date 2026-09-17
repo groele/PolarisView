@@ -82,6 +82,7 @@ js/core/parser.js              解析、切片与统计
 js/core/data-quality.js        质量检查与结论边界
 js/algorithms/                 基线、滤波与拟合引擎
 js/ui/chart-manager.js         交互式可视化
+js/ui/overlay-manager.js       微区极坐标与显微照片叠加引擎
 js/ui/report-engine.js         PDF/HTML 报告生成
 js/core/xlsx-exporter.js       面向 OriginPro 的 Excel 导出
 Pol.txt                        可选实测示例
@@ -89,4 +90,4 @@ Pol.txt                        可选实测示例
 
 ## 版本
 
-当前扩展版本：**v3.0.0**。
+当前扩展版本：**v3.1.0**。

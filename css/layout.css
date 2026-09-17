@@ -229,3 +229,472 @@ html, body {
   grid-template-columns: 1fr 1fr;
   gap: 0.5rem;
 }
+
+/* 7. 样品光学图叠加视口卡片 */
+.overlay-chart-card {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: var(--bg-surface-elevated);
+  overflow: hidden;
+  height: 100%;
+  width: 100%;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 全屏沉浸式微区分析模式 */
+.overlay-chart-card.is-fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 9999 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.overlay-floating-bar {
+  position: absolute;
+  top: 0.65rem;
+  left: 0.65rem;
+  right: 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 20;
+  padding: 0.4rem 0.75rem;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow), 0 4px 20px rgba(0, 0, 0, 0.08);
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  transition: all 0.2s ease;
+}
+
+.overlay-bar-group {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.overlay-group-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* 旋转微调步进集群 */
+.overlay-stepper-cluster {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  gap: 1px;
+}
+
+.stepper-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.2rem 0.38rem;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  user-select: none;
+}
+
+.stepper-btn:hover {
+  background: var(--bg-surface);
+  color: var(--primary-600);
+}
+
+.stepper-btn:active {
+  transform: scale(0.92);
+}
+
+.stepper-display {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  padding: 0.15rem 0.45rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--primary-600);
+  cursor: pointer;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.04);
+}
+
+.stepper-display:hover {
+  border-color: var(--primary-500);
+}
+
+.overlay-status-badge {
+  font-size: 0.68rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--text-muted);
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border-subtle);
+  padding: 0.22rem 0.55rem;
+  border-radius: var(--radius-sm);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overlay-canvas-wrapper {
+  flex: 1 1 0;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #090d16;
+  overflow: hidden;
+}
+
+.overlay-canvas-wrapper.drag-over {
+  border: 2px dashed var(--primary-500);
+  background: rgba(37, 99, 235, 0.1);
+}
+
+#overlayCanvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  cursor: grab;
+  user-select: none;
+}
+
+/* 画布微调快捷 HUD 悬浮抽屉 */
+.overlay-quick-hud {
+  position: absolute;
+  top: 3.8rem;
+  right: 0.85rem;
+  width: 320px;
+  max-height: calc(100% - 4.8rem);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg), 0 10px 32px rgba(0, 0, 0, 0.3);
+  z-index: 25;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  animation: hudSlideDown 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes hudSlideDown {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.hud-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 0.8rem;
+  border-bottom: 1px solid var(--border-subtle);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="dark"] .hud-header {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.hud-title {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-main);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.hud-close-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 0.2rem;
+  border-radius: 4px;
+}
+
+.hud-close-btn:hover {
+  color: var(--text-main);
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.hud-body {
+  padding: 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.hud-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.hud-label {
+  font-size: 0.7rem;
+  font-weight: 650;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.hud-slider-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.hud-val {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--primary-600);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+/* 主题与滤镜胶囊按钮群 */
+.hud-theme-pills, .hud-dock-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.hud-theme-pill, .hud-dock-btn {
+  padding: 0.22rem 0.55rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all 0.14s ease;
+  user-select: none;
+}
+
+.hud-theme-pill:hover, .hud-dock-btn:hover {
+  border-color: var(--primary-500);
+  color: var(--primary-600);
+  transform: translateY(-1px);
+}
+
+.hud-theme-pill.active, .hud-dock-btn.active {
+  background: linear-gradient(135deg, var(--primary-600), var(--primary-700));
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35);
+}
+
+/* 翡翠绿配色胶囊的高光标识 */
+.hud-theme-pill[data-theme="emerald"].active {
+  background: linear-gradient(135deg, #10b981, #059669);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.45);
+}
+
+/* 图层复选框小磁贴 */
+.hud-chips-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.35rem;
+}
+
+.hud-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.7rem;
+  color: var(--text-main);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  padding: 0.25rem 0.45rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.12s ease;
+}
+
+.hud-chip:hover {
+  border-color: var(--primary-500);
+}
+
+.hud-chip input[type="checkbox"] {
+  accent-color: var(--primary-600);
+  cursor: pointer;
+}
+
+/* 提示栏美化与支持关闭 */
+.overlay-drag-hint {
+  position: absolute;
+  bottom: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(15, 23, 42, 0.82);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.7rem;
+  padding: 0.3rem 0.95rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  white-space: nowrap;
+  z-index: 15;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.overlay-drag-hint.is-faded {
+  opacity: 0.18;
+}
+
+.overlay-drag-hint:hover {
+  opacity: 1 !important;
+}
+
+.hint-close-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0 0.15rem;
+}
+
+.hint-close-btn:hover {
+  color: #ffffff;
+}
+
+/* 步骤 1 样品光学照片缩略图与直达卡片 */
+.opt-preview-card {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.5rem;
+  background: var(--bg-surface-elevated, #1e293b);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-md, 8px);
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.2));
+  animation: optFadeIn 0.2s ease-out;
+}
+
+@keyframes optFadeIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.opt-preview-thumb-box {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 56px;
+  border-radius: var(--radius-sm, 6px);
+  overflow: hidden;
+  background: #0b0f19;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.opt-preview-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.opt-preview-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.opt-preview-name {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-primary, #f1f5f9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.opt-preview-meta {
+  font-size: 0.68rem;
+  font-family: ui-monospace, Consolas, monospace;
+  color: var(--text-muted, #94a3b8);
+}
+
+.opt-preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+}
+
+.btn-xs {
+  padding: 0.18rem 0.5rem;
+  font-size: 0.68rem;
+  border-radius: var(--radius-sm, 4px);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  line-height: 1.2;
+}
+
+/* 叠加视图浮动反馈 Toast */
+.overlay-toast {
+  position: absolute;
+  top: 3.8rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  pointer-events: none;
+  background: rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(8px);
+  color: #38bdf8;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.35rem 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  white-space: nowrap;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+  animation: toastSlideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes toastSlideDown {
+  from { opacity: 0; transform: translate(-50%, -8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+

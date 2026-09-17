@@ -8,6 +8,7 @@ class PolarizationApp {
     ExtensionBridge.registerDashboard();
     this.store = new StateStore();
     this.chartManager = null;
+    this.overlayManager = null;
     this.tableGrid = null;
     this.parsedState = null;
     this.currentRawPoints = [];
@@ -36,6 +37,11 @@ class PolarizationApp {
         this.analysisGroupVisibility = { ...this.analysisGroupVisibility, ...visibility };
         this.processAndRender();
       });
+
+      // 1.1 初始化样品显微照片叠加引擎
+      this.overlayManager = new PolarOverlayManager('overlayCanvas');
+      this.overlayManager.onConfigChange = (cfg) => this.syncOverlayControls(cfg);
+      this.overlayManager.onImageLoaded = (name, w, h, dataUrl) => this.updateOverlayImageStatus(name, w, h, dataUrl);
 
       // 2. 初始化表格式交互编辑组件
       this.tableGrid = new TableGrid('tableInputContainer', {
@@ -85,7 +91,37 @@ class PolarizationApp {
       // 6. 延迟触发尺寸校准，避免首屏 DOM 加载瞬态尺寸为 0
       setTimeout(() => {
         if (this.chartManager) this.chartManager.resize();
+        if (this.overlayManager) this.overlayManager.resize();
       }, 100);
+      window.addEventListener('resize', () => {
+        if (this.overlayManager) this.overlayManager.resize();
+      });
+
+      // 7. URL 参数深度链接支持 (例如 ?preset=real_pol&view=overlay&hud=1)
+      if (typeof window !== 'undefined' && window.location?.search) {
+        const params = new URLSearchParams(window.location.search);
+        const preset = params.get('preset') || (params.get('autotest') ? 'real_pol' : null);
+        if (preset) {
+          this.loadPreset(preset);
+        }
+        const view = params.get('view') || (params.get('autotest') ? 'overlay' : null);
+        if (view) {
+          setTimeout(() => {
+            this.switchToView(view);
+            const theme = params.get('theme');
+            if (theme) this.overlayManager?.setTheme(theme);
+            const corner = params.get('corner');
+            if (corner) this.overlayManager?.setBadgeCorner(corner);
+            if (params.get('loadMicro')) {
+              this.overlayManager?.loadPresetBundle(preset || 'real_pol', null, true);
+            }
+            if (params.get('hud') || params.get('autotest')) {
+              const btnHud = document.getElementById('btnToggleOverlayHud');
+              if (btnHud) btnHud.click();
+            }
+          }, 250);
+        }
+      }
     } catch (e) {
       console.error('应用初始化异常:', e);
     }
@@ -240,6 +276,7 @@ class PolarizationApp {
     if (journalTheme) {
       journalTheme.addEventListener('change', (e) => {
         this.chartManager.setJournalTheme(e.target.value);
+        if (this.overlayManager) this.overlayManager.setTheme(e.target.value);
       });
     }
 
@@ -297,40 +334,65 @@ class PolarizationApp {
     const baselineContainer = document.getElementById('baselineChartCard');
     const residualContainer = document.getElementById('residualChartCard');
     const unifiedContainer = document.getElementById('unifiedChartCard');
+    const overlayContainer = document.getElementById('overlayChartCard');
+
+    this.switchToView = (view) => {
+      viewButtons.forEach(b => {
+        const isTarget = b.dataset.view === view;
+        b.classList.toggle('active', isTarget);
+        b.setAttribute('aria-pressed', isTarget ? 'true' : 'false');
+      });
+      this.activeView = view;
+
+      chartViewport.classList.remove('dual-view');
+      polarContainer.style.display = 'none';
+      cartesianContainer.style.display = 'none';
+      baselineContainer.style.display = 'none';
+      residualContainer.style.display = 'none';
+      if (unifiedContainer) unifiedContainer.style.display = 'none';
+      if (overlayContainer) overlayContainer.style.display = 'none';
+
+      if (view === 'polar') {
+        polarContainer.style.display = 'flex';
+      } else if (view === 'cartesian') {
+        cartesianContainer.style.display = 'flex';
+      } else if (view === 'baseline') {
+        baselineContainer.style.display = 'flex';
+      } else if (view === 'unified') {
+        if (unifiedContainer) unifiedContainer.style.display = 'flex';
+      } else if (view === 'residual') {
+        residualContainer.style.display = 'flex';
+      } else if (view === 'dual') {
+        chartViewport.classList.add('dual-view');
+        polarContainer.style.display = 'flex';
+        baselineContainer.style.display = 'flex';
+      } else if (view === 'overlay') {
+        if (overlayContainer) overlayContainer.style.display = 'flex';
+        if (this.overlayManager) {
+          this.overlayManager.resize();
+          this.overlayManager.render();
+          requestAnimationFrame(() => {
+            if (this.overlayManager) {
+              this.overlayManager.resize();
+              this.overlayManager.render();
+            }
+          });
+        }
+      }
+
+      this.chartManager.render();
+      setTimeout(() => {
+        this.chartManager.resize();
+        if (this.overlayManager) {
+          this.overlayManager.resize();
+          this.overlayManager.render();
+        }
+      }, 50);
+    };
 
     viewButtons.forEach(btn => {
       btn.addEventListener('click', () => {
-        viewButtons.forEach(b => { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
-        btn.classList.add('active');
-        btn.setAttribute('aria-pressed', 'true');
-        const view = btn.dataset.view;
-        this.activeView = view;
-
-        chartViewport.classList.remove('dual-view');
-        polarContainer.style.display = 'none';
-        cartesianContainer.style.display = 'none';
-        baselineContainer.style.display = 'none';
-        residualContainer.style.display = 'none';
-        if (unifiedContainer) unifiedContainer.style.display = 'none';
-
-        if (view === 'polar') {
-          polarContainer.style.display = 'flex';
-        } else if (view === 'cartesian') {
-          cartesianContainer.style.display = 'flex';
-        } else if (view === 'baseline') {
-          baselineContainer.style.display = 'flex';
-        } else if (view === 'unified') {
-          if (unifiedContainer) unifiedContainer.style.display = 'flex';
-        } else if (view === 'residual') {
-          residualContainer.style.display = 'flex';
-        } else if (view === 'dual') {
-          chartViewport.classList.add('dual-view');
-          polarContainer.style.display = 'flex';
-          baselineContainer.style.display = 'flex';
-        }
-
-        this.chartManager.render();
-        setTimeout(() => this.chartManager.resize(), 50);
+        this.switchToView(btn.dataset.view);
       });
     });
 
@@ -345,6 +407,7 @@ class PolarizationApp {
           ? '<svg class="ui-icon" aria-hidden="true"><use href="#i-sun"/></svg>亮色模式'
           : '<svg class="ui-icon" aria-hidden="true"><use href="#i-moon"/></svg>暗色模式';
         this.chartManager.setJournalTheme(newTheme === 'dark' ? 'dark_lab' : 'nature');
+        if (this.overlayManager) this.overlayManager.setTheme(newTheme === 'dark' ? 'dark_lab' : 'nature');
       });
     }
 
@@ -394,13 +457,21 @@ class PolarizationApp {
 
     if (btnExportPng) {
       btnExportPng.addEventListener('click', () => {
-        this.chartManager.exportImage(this.activeView, 'png', 3);
+        if (this.activeView === 'overlay' && this.overlayManager) {
+          this.overlayManager.exportOverlayImage({ format: 'png', scale: 3 });
+        } else {
+          this.chartManager.exportImage(this.activeView, 'png', 3);
+        }
       });
     }
 
     if (btnExportSvg) {
       btnExportSvg.addEventListener('click', () => {
-        this.chartManager.exportImage(this.activeView, 'svg');
+        if (this.activeView === 'overlay' && this.overlayManager) {
+          this.overlayManager.exportOverlayImage({ format: 'png', scale: 3 });
+        } else {
+          this.chartManager.exportImage(this.activeView, 'svg');
+        }
       });
     }
 
@@ -425,6 +496,583 @@ class PolarizationApp {
 
     const btnExportRecipe = document.getElementById('btnExportRecipe');
     if (btnExportRecipe) btnExportRecipe.addEventListener('click', () => this.exportAnalysisRecipe());
+
+    // 绑定样品光学图像叠加交互事件
+    this.bindOverlayEvents();
+  }
+
+  showOverlayToast(msg) {
+    const toast = document.getElementById('overlayToast');
+    const toastText = document.getElementById('overlayToastText');
+    if (!toast || !toastText) return;
+    toastText.textContent = msg;
+    toast.style.display = 'block';
+    toast.style.opacity = '1';
+    if (this._overlayToastTimer) clearTimeout(this._overlayToastTimer);
+    this._overlayToastTimer = setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => { toast.style.display = 'none'; }, 350);
+    }, 3200);
+  }
+
+  bindOverlayEvents() {
+    // 1. 光学图片导入与清除 (主舞台浮动栏)
+    const overlayImgInput = document.getElementById('overlayImageInput');
+    if (overlayImgInput) {
+      overlayImgInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+          this.overlayManager?.loadImageFromFile(e.target.files[0]);
+          this.switchToView('overlay');
+          this.showOverlayToast(`已导入光学照片: ${e.target.files[0].name}，已对准样品微区`);
+          e.target.value = '';
+        }
+      });
+    }
+
+    // 1.1 步骤 1 (数据录入区) 样品光学照片联动
+    const step1UploadZone = document.getElementById('step1OptUploadZone');
+    const step1FileInput = document.getElementById('step1OptFileInput');
+    if (step1UploadZone && step1FileInput) {
+      step1UploadZone.addEventListener('click', () => step1FileInput.click());
+      step1UploadZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        step1UploadZone.classList.add('dragover');
+      });
+      step1UploadZone.addEventListener('dragleave', () => step1UploadZone.classList.remove('dragover'));
+      step1UploadZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        step1UploadZone.classList.remove('dragover');
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+          this.overlayManager?.loadImageFromFile(e.dataTransfer.files[0]);
+          this.switchToView('overlay');
+          this.showOverlayToast(`已导入光学照片: ${e.dataTransfer.files[0].name}，已自动切换至叠加视图`);
+        }
+      });
+      step1FileInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+          this.overlayManager?.loadImageFromFile(e.target.files[0]);
+          this.switchToView('overlay');
+          this.showOverlayToast(`已导入光学照片: ${e.target.files[0].name}，已自动切换至叠加视图`);
+          e.target.value = '';
+        }
+      });
+    }
+
+    // 步骤 1 预览卡片直达主视图与更换照片
+    const btnStep1View = document.getElementById('btnStep1ViewOverlay');
+    if (btnStep1View) {
+      btnStep1View.addEventListener('click', () => {
+        this.switchToView('overlay');
+      });
+    }
+
+    const btnStep1Replace = document.getElementById('btnStep1ReplaceImg');
+    if (btnStep1Replace && step1FileInput) {
+      btnStep1Replace.addEventListener('click', () => {
+        step1FileInput.click();
+      });
+    }
+
+    const btnStep1Preset = document.getElementById('btnStep1LoadPresetImg');
+    if (btnStep1Preset) {
+      btnStep1Preset.addEventListener('click', () => {
+        const presetKey = document.getElementById('presetSelector')?.value || this.currentPresetKey || 'real_pol';
+        this.overlayManager?.loadPresetBundle(presetKey, null, true);
+        this.switchToView('overlay');
+        this.showOverlayToast(`已联动载入预设样品显微照片套件 [${presetKey}]`);
+      });
+    }
+
+    const btnStep1Clear = document.getElementById('btnStep1ClearImg');
+    if (btnStep1Clear) {
+      btnStep1Clear.addEventListener('click', () => {
+        this.overlayManager?.clearImage();
+      });
+    }
+
+    // 1.2 预设样品图与清除 (主舞台悬浮栏)
+    const btnSample = document.getElementById('btnOverlaySampleImg');
+    if (btnSample) {
+      btnSample.addEventListener('click', () => {
+        const presetKey = document.getElementById('presetSelector')?.value || this.currentPresetKey || 'real_pol';
+        this.overlayManager?.loadPresetBundle(presetKey, null, true);
+        this.showOverlayToast(`已联动预设光学照片 [${presetKey}]`);
+      });
+    }
+
+    const btnClear = document.getElementById('btnOverlayClearImg');
+    if (btnClear) {
+      btnClear.addEventListener('click', () => {
+        this.overlayManager?.clearImage();
+      });
+    }
+
+    const btnResetPos = document.getElementById('btnOverlayResetPos');
+    if (btnResetPos) {
+      btnResetPos.addEventListener('click', () => {
+        this.overlayManager?.locateOnTargetFlake();
+      });
+    }
+
+    const btnOverlayExport = document.getElementById('btnOverlayExportPng');
+    if (btnOverlayExport) {
+      btnOverlayExport.addEventListener('click', () => {
+        this.overlayManager?.exportOverlayImage({ format: 'png', scale: 3 });
+      });
+    }
+
+    // 1.3 快捷旋转对齐晶棱控制器
+    const btnRotM5 = document.getElementById('btnOverlayRotM5');
+    if (btnRotM5) btnRotM5.addEventListener('click', () => this.overlayManager?.stepRotation(-5));
+
+    const btnRotM1 = document.getElementById('btnOverlayRotM1');
+    if (btnRotM1) btnRotM1.addEventListener('click', () => this.overlayManager?.stepRotation(-1));
+
+    const btnRotReset = document.getElementById('btnOverlayRotReset');
+    if (btnRotReset) btnRotReset.addEventListener('click', () => this.overlayManager?.setRotation(0));
+
+    const btnRotP1 = document.getElementById('btnOverlayRotP1');
+    if (btnRotP1) btnRotP1.addEventListener('click', () => this.overlayManager?.stepRotation(1));
+
+    const btnRotP5 = document.getElementById('btnOverlayRotP5');
+    if (btnRotP5) btnRotP5.addEventListener('click', () => this.overlayManager?.stepRotation(5));
+
+    // 1.4 HUD 抽屉面板展开/收起
+    const btnToggleHud = document.getElementById('btnToggleOverlayHud');
+    const hudPanel = document.getElementById('overlayQuickHud');
+    const btnCloseHud = document.getElementById('btnCloseOverlayHud');
+
+    if (btnToggleHud && hudPanel) {
+      btnToggleHud.addEventListener('click', () => {
+        const isHidden = hudPanel.style.display === 'none' || !hudPanel.style.display;
+        hudPanel.style.display = isHidden ? 'flex' : 'none';
+      });
+    }
+    if (btnCloseHud && hudPanel) {
+      btnCloseHud.addEventListener('click', () => {
+        hudPanel.style.display = 'none';
+      });
+    }
+
+    // 1.5 全屏沉浸式微区分析模式
+    const btnFullscreen = document.getElementById('btnOverlayFullscreen');
+    const overlayCard = document.getElementById('overlayChartCard');
+    if (btnFullscreen && overlayCard) {
+      btnFullscreen.addEventListener('click', () => {
+        overlayCard.classList.toggle('is-fullscreen');
+        const isFull = overlayCard.classList.contains('is-fullscreen');
+        btnFullscreen.innerHTML = isFull
+          ? '<svg class="ui-icon"><use href="#i-fullscreen"/></svg>退出全屏'
+          : '<svg class="ui-icon"><use href="#i-fullscreen"/></svg>全屏';
+        setTimeout(() => {
+          this.overlayManager?.resize();
+          this.overlayManager?.render();
+        }, 60);
+      });
+    }
+
+    // 1.6 忽略提示栏
+    const btnDismissHint = document.getElementById('btnDismissOverlayHint');
+    const hintBar = document.getElementById('overlayDragHint');
+    if (btnDismissHint && hintBar) {
+      btnDismissHint.addEventListener('click', () => {
+        hintBar.style.display = 'none';
+      });
+    }
+
+    // 1.7 HUD 配色胶囊一键切换
+    document.querySelectorAll('.hud-theme-pill[data-theme]').forEach(pill => {
+      pill.addEventListener('click', () => {
+        document.querySelectorAll('.hud-theme-pill[data-theme]').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        const t = pill.dataset.theme;
+        this.overlayManager?.setTheme(t);
+        const journalSel = document.getElementById('journalTheme');
+        if (journalSel && [...journalSel.options].some(o => o.value === t)) {
+          journalSel.value = t;
+        }
+      });
+    });
+
+    // 1.8 HUD 快捷滑块
+    const hudOpacity = document.getElementById('hudOpacitySlider');
+    if (hudOpacity) {
+      hudOpacity.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        const hudVal = document.getElementById('hudOpacityVal');
+        if (hudVal) hudVal.textContent = `${val}%`;
+        const sideOp = document.getElementById('overlayOpacity');
+        const sideVal = document.getElementById('overlayOpacityVal');
+        if (sideOp) sideOp.value = val;
+        if (sideVal) sideVal.textContent = `${val}%`;
+        this.overlayManager?.updateConfig({ opacity: val / 100 });
+      });
+    }
+
+    const hudScale = document.getElementById('hudScaleSlider');
+    if (hudScale) {
+      hudScale.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        const hudVal = document.getElementById('hudScaleVal');
+        if (hudVal) hudVal.textContent = `${val}%`;
+        const sideScale = document.getElementById('overlayScale');
+        const sideVal = document.getElementById('overlayScaleVal');
+        if (sideScale) sideScale.value = val;
+        if (sideVal) sideVal.textContent = `${val}%`;
+        this.overlayManager?.updateConfig({ scale: val / 100 });
+      });
+    }
+
+    // 1.9 HUD 图层显隐磁贴联动
+    const linkHudCheck = (hudId, sideId, configKey) => {
+      const hudEl = document.getElementById(hudId);
+      const sideEl = document.getElementById(sideId);
+      if (hudEl) {
+        hudEl.addEventListener('change', (e) => {
+          if (sideEl) sideEl.checked = e.target.checked;
+          this.overlayManager?.updateConfig({ [configKey]: e.target.checked });
+        });
+      }
+    };
+    linkHudCheck('hudChkGrid', 'overlayShowGrid', 'showGrid');
+    linkHudCheck('hudChkFastAxis', 'overlayShowFastAxis', 'showFastAxis');
+    linkHudCheck('hudChkLabels', 'overlayShowLabels', 'showLabels');
+    linkHudCheck('hudChkReticle', 'overlayShowReticle', 'showReticle');
+    linkHudCheck('hudChkBadge', 'overlayShowBadge', 'showBadge');
+    linkHudCheck('hudChkDynamic', 'overlayDynamicRange', 'dynamicRange');
+
+    // 1.10 HUD 学术信息卡停靠方位
+    document.querySelectorAll('.hud-dock-btn[data-corner]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.hud-dock-btn[data-corner]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.overlayManager?.setBadgeCorner(btn.dataset.corner);
+      });
+    });
+
+    // 1.11 HUD 图像快速滤镜
+    const applyFilterMode = (mode, btn) => {
+      document.querySelectorAll('#btnHudFilterNormal, #btnHudFilterContrast, #btnHudFilterGray, #btnHudFilterInvert')
+        .forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+
+      let filters = { brightness: 100, contrast: 100, grayscale: false, invert: false };
+      if (mode === 'contrast') filters = { brightness: 105, contrast: 155, grayscale: false, invert: false };
+      else if (mode === 'gray') filters = { brightness: 100, contrast: 105, grayscale: true, invert: false };
+      else if (mode === 'invert') filters = { brightness: 100, contrast: 100, grayscale: false, invert: true };
+
+      // 同步到侧边栏
+      const bEl = document.getElementById('overlayBrightness');
+      const bVal = document.getElementById('overlayBrightnessVal');
+      if (bEl) bEl.value = filters.brightness;
+      if (bVal) bVal.textContent = `${filters.brightness}%`;
+
+      const cEl = document.getElementById('overlayContrast');
+      const cVal = document.getElementById('overlayContrastVal');
+      if (cEl) cEl.value = filters.contrast;
+      if (cVal) cVal.textContent = `${filters.contrast}%`;
+
+      const gEl = document.getElementById('overlayGrayscale');
+      if (gEl) gEl.checked = filters.grayscale;
+
+      const iEl = document.getElementById('overlayInvert');
+      if (iEl) iEl.checked = filters.invert;
+
+      this.overlayManager?.updateFilters(filters);
+    };
+
+    const btnFNorm = document.getElementById('btnHudFilterNormal');
+    if (btnFNorm) btnFNorm.addEventListener('click', () => applyFilterMode('normal', btnFNorm));
+    const btnFCont = document.getElementById('btnHudFilterContrast');
+    if (btnFCont) btnFCont.addEventListener('click', () => applyFilterMode('contrast', btnFCont));
+    const btnFGray = document.getElementById('btnHudFilterGray');
+    if (btnFGray) btnFGray.addEventListener('click', () => applyFilterMode('gray', btnFGray));
+    const btnFInv = document.getElementById('btnHudFilterInvert');
+    if (btnFInv) btnFInv.addEventListener('click', () => applyFilterMode('invert', btnFInv));
+
+    // 1.12 全局快捷键：F 全屏，R 对准微区
+    window.addEventListener('keydown', (e) => {
+      if (this.activeView !== 'overlay') return;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
+      if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault();
+        btnFullscreen?.click();
+      } else if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault();
+        btnResetPos?.click();
+      }
+    });
+
+    // 2. 侧边栏图像调节控件
+    const bright = document.getElementById('overlayBrightness');
+    if (bright) {
+      bright.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        const label = document.getElementById('overlayBrightnessVal');
+        if (label) label.textContent = `${val}%`;
+        this.overlayManager?.updateFilters({ brightness: val });
+      });
+    }
+
+    const contrast = document.getElementById('overlayContrast');
+    if (contrast) {
+      contrast.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        const label = document.getElementById('overlayContrastVal');
+        if (label) label.textContent = `${val}%`;
+        this.overlayManager?.updateFilters({ contrast: val });
+      });
+    }
+
+    const gray = document.getElementById('overlayGrayscale');
+    if (gray) {
+      gray.addEventListener('change', (e) => {
+        this.overlayManager?.updateFilters({ grayscale: e.target.checked });
+      });
+    }
+
+    const invert = document.getElementById('overlayInvert');
+    if (invert) {
+      invert.addEventListener('change', (e) => {
+        this.overlayManager?.updateFilters({ invert: e.target.checked });
+      });
+    }
+
+    // 3. 侧边栏极坐标叠加几何与外观控件
+    const scale = document.getElementById('overlayScale');
+    if (scale) {
+      scale.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        const label = document.getElementById('overlayScaleVal');
+        if (label) label.textContent = `${val}%`;
+        const hudScaleEl = document.getElementById('hudScaleSlider');
+        const hudVal = document.getElementById('hudScaleVal');
+        if (hudScaleEl) hudScaleEl.value = val;
+        if (hudVal) hudVal.textContent = `${val}%`;
+        this.overlayManager?.updateConfig({ scale: val / 100 });
+      });
+    }
+
+    const rot = document.getElementById('overlayRotation');
+    if (rot) {
+      rot.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        const label = document.getElementById('overlayRotationVal');
+        if (label) label.textContent = `${val}°`;
+        const quickRot = document.getElementById('overlayQuickRotLabel');
+        if (quickRot) quickRot.textContent = `${val}°`;
+        this.overlayManager?.updateConfig({ rotation: val });
+      });
+    }
+
+    const op = document.getElementById('overlayOpacity');
+    if (op) {
+      op.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        const label = document.getElementById('overlayOpacityVal');
+        if (label) label.textContent = `${val}%`;
+        const hudOp = document.getElementById('hudOpacitySlider');
+        const hudVal = document.getElementById('hudOpacityVal');
+        if (hudOp) hudOp.value = val;
+        if (hudVal) hudVal.textContent = `${val}%`;
+        this.overlayManager?.updateConfig({ opacity: val / 100 });
+      });
+    }
+
+    const rMode = document.getElementById('overlayRenderMode');
+    if (rMode) {
+      rMode.addEventListener('change', (e) => {
+        this.overlayManager?.updateConfig({ mode: e.target.value });
+      });
+    }
+
+    const bgStyle = document.getElementById('overlayBgStyle');
+    if (bgStyle) {
+      bgStyle.addEventListener('change', (e) => {
+        this.overlayManager?.updateConfig({ bgStyle: e.target.value });
+      });
+    }
+
+    const chkGrid = document.getElementById('overlayShowGrid');
+    if (chkGrid) {
+      chkGrid.addEventListener('change', (e) => {
+        const hudGrid = document.getElementById('hudChkGrid');
+        if (hudGrid) hudGrid.checked = e.target.checked;
+        this.overlayManager?.updateConfig({ showGrid: e.target.checked });
+      });
+    }
+
+    const chkFast = document.getElementById('overlayShowFastAxis');
+    if (chkFast) {
+      chkFast.addEventListener('change', (e) => {
+        const hudFast = document.getElementById('hudChkFastAxis');
+        if (hudFast) hudFast.checked = e.target.checked;
+        this.overlayManager?.updateConfig({ showFastAxis: e.target.checked });
+      });
+    }
+
+    const chkLabels = document.getElementById('overlayShowLabels');
+    if (chkLabels) {
+      chkLabels.addEventListener('change', (e) => {
+        const hudLabels = document.getElementById('hudChkLabels');
+        if (hudLabels) hudLabels.checked = e.target.checked;
+        this.overlayManager?.updateConfig({ showLabels: e.target.checked });
+      });
+    }
+
+    const chkBadge = document.getElementById('overlayShowBadge');
+    if (chkBadge) {
+      chkBadge.addEventListener('change', (e) => {
+        const hudBadge = document.getElementById('hudChkBadge');
+        if (hudBadge) hudBadge.checked = e.target.checked;
+        this.overlayManager?.updateConfig({ showBadge: e.target.checked });
+      });
+    }
+
+    const chkReticle = document.getElementById('overlayShowReticle');
+    if (chkReticle) {
+      chkReticle.addEventListener('change', (e) => {
+        const hudReticle = document.getElementById('hudChkReticle');
+        if (hudReticle) hudReticle.checked = e.target.checked;
+        this.overlayManager?.updateConfig({ showReticle: e.target.checked });
+      });
+    }
+
+    const chkDynamic = document.getElementById('overlayDynamicRange');
+    if (chkDynamic) {
+      chkDynamic.addEventListener('change', (e) => {
+        const hudDyn = document.getElementById('hudChkDynamic');
+        if (hudDyn) hudDyn.checked = e.target.checked;
+        this.overlayManager?.updateConfig({ dynamicRange: e.target.checked });
+      });
+    }
+  }
+
+  syncOverlayControls(cfg) {
+    if (!cfg) return;
+    const scaleEl = document.getElementById('overlayScale');
+    const scaleVal = document.getElementById('overlayScaleVal');
+    const hudScale = document.getElementById('hudScaleSlider');
+    const hudScaleVal = document.getElementById('hudScaleVal');
+    if (cfg.scale !== undefined) {
+      const pct = Math.round(cfg.scale * 100);
+      if (scaleEl) scaleEl.value = pct;
+      if (scaleVal) scaleVal.textContent = `${pct}%`;
+      if (hudScale) hudScale.value = pct;
+      if (hudScaleVal) hudScaleVal.textContent = `${pct}%`;
+    }
+    const rotEl = document.getElementById('overlayRotation');
+    const rotVal = document.getElementById('overlayRotationVal');
+    const quickRotLabel = document.getElementById('overlayQuickRotLabel');
+    if (cfg.rotation !== undefined) {
+      const rot = Math.round(cfg.rotation);
+      if (rotEl) rotEl.value = rot;
+      if (rotVal) rotVal.textContent = `${rot}°`;
+      if (quickRotLabel) quickRotLabel.textContent = `${rot}°`;
+    }
+    const opEl = document.getElementById('overlayOpacity');
+    const opVal = document.getElementById('overlayOpacityVal');
+    const hudOp = document.getElementById('hudOpacitySlider');
+    const hudOpVal = document.getElementById('hudOpacityVal');
+    if (cfg.opacity !== undefined) {
+      const opPct = Math.round(cfg.opacity * 100);
+      if (opEl) opEl.value = opPct;
+      if (opVal) opVal.textContent = `${opPct}%`;
+      if (hudOp) hudOp.value = opPct;
+      if (hudOpVal) hudOpVal.textContent = `${opPct}%`;
+    }
+    const chkDynamic = document.getElementById('overlayDynamicRange');
+    const hudDyn = document.getElementById('hudChkDynamic');
+    if (cfg.dynamicRange !== undefined) {
+      if (chkDynamic) chkDynamic.checked = Boolean(cfg.dynamicRange);
+      if (hudDyn) hudDyn.checked = Boolean(cfg.dynamicRange);
+    }
+    const chkReticle = document.getElementById('overlayShowReticle');
+    const hudReticle = document.getElementById('hudChkReticle');
+    if (cfg.showReticle !== undefined) {
+      if (chkReticle) chkReticle.checked = Boolean(cfg.showReticle);
+      if (hudReticle) hudReticle.checked = Boolean(cfg.showReticle);
+    }
+    const chkGrid = document.getElementById('overlayShowGrid');
+    const hudGrid = document.getElementById('hudChkGrid');
+    if (cfg.showGrid !== undefined) {
+      if (chkGrid) chkGrid.checked = Boolean(cfg.showGrid);
+      if (hudGrid) hudGrid.checked = Boolean(cfg.showGrid);
+    }
+    const chkFast = document.getElementById('overlayShowFastAxis');
+    const hudFast = document.getElementById('hudChkFastAxis');
+    if (cfg.showFastAxis !== undefined) {
+      if (chkFast) chkFast.checked = Boolean(cfg.showFastAxis);
+      if (hudFast) hudFast.checked = Boolean(cfg.showFastAxis);
+    }
+    const chkLabels = document.getElementById('overlayShowLabels');
+    const hudLabels = document.getElementById('hudChkLabels');
+    if (cfg.showLabels !== undefined) {
+      if (chkLabels) chkLabels.checked = Boolean(cfg.showLabels);
+      if (hudLabels) hudLabels.checked = Boolean(cfg.showLabels);
+    }
+    const chkBadge = document.getElementById('overlayShowBadge');
+    const hudBadge = document.getElementById('hudChkBadge');
+    if (cfg.showBadge !== undefined) {
+      if (chkBadge) chkBadge.checked = Boolean(cfg.showBadge);
+      if (hudBadge) hudBadge.checked = Boolean(cfg.showBadge);
+    }
+    if (cfg.theme) {
+      document.querySelectorAll('.hud-theme-pill[data-theme]').forEach(p => {
+        p.classList.toggle('active', p.dataset.theme === cfg.theme);
+      });
+    }
+    if (cfg.badgeCorner) {
+      document.querySelectorAll('.hud-dock-btn[data-corner]').forEach(b => {
+        b.classList.toggle('active', b.dataset.corner === cfg.badgeCorner);
+      });
+    }
+  }
+
+  updateOverlayImageStatus(name, w, h, dataUrl) {
+    const status = document.getElementById('overlayImageStatus');
+    if (status) {
+      status.textContent = name ? `${name} (${w}×${h})` : '极坐标图优先呈现 · 待导入底图';
+    }
+
+    const step1Badge = document.getElementById('step1OptStatusBadge');
+    if (step1Badge) {
+      if (this.overlayManager?.isSampleImage) {
+        step1Badge.textContent = `已联动预设图: ${this.overlayManager.currentPresetSampleName || name}`;
+        step1Badge.className = 'badge badge-success';
+      } else if (this.overlayManager?.image) {
+        step1Badge.textContent = `已载入实拍图: ${name}`;
+        step1Badge.className = 'badge badge-success';
+      } else {
+        step1Badge.textContent = '待导入光学底图 · 极坐标已就绪';
+        step1Badge.className = 'badge badge-secondary';
+      }
+    }
+
+    // 步骤 1 缩略图卡片与上传区联动状态切换
+    const uploadZone = document.getElementById('step1OptUploadZone');
+    const previewCard = document.getElementById('step1OptPreviewCard');
+    const thumbImg = document.getElementById('step1OptThumbnail');
+    const fileNameEl = document.getElementById('step1OptFileName');
+    const resEl = document.getElementById('step1OptResolution');
+
+    if (this.overlayManager?.image && (name || dataUrl)) {
+      if (uploadZone) uploadZone.style.display = 'none';
+      if (previewCard) previewCard.style.display = 'flex';
+      if (thumbImg) {
+        if (dataUrl) {
+          thumbImg.src = dataUrl;
+        } else if (this.overlayManager.image.src) {
+          thumbImg.src = this.overlayManager.image.src;
+        }
+      }
+      if (fileNameEl) fileNameEl.textContent = name || '样品显微照片';
+      if (resEl) resEl.textContent = `${w || 1200} × ${h || 900} px`;
+    } else {
+      if (uploadZone) uploadZone.style.display = 'block';
+      if (previewCard) previewCard.style.display = 'none';
+      if (thumbImg) thumbImg.src = '';
+    }
   }
 
   updateAnalysisModeControls() {
@@ -446,12 +1094,19 @@ class PolarizationApp {
     const preset = PolarizationPresets[presetKey] || PolarizationPresets['real_pol'];
     const rawDataInput = document.getElementById('rawDataInput');
     const angleMultiplier = document.getElementById('angleMultiplier');
+    const presetSelector = document.getElementById('presetSelector');
 
+    if (presetSelector) presetSelector.value = presetKey;
     if (angleMultiplier) angleMultiplier.value = preset.multiplier;
     if (rawDataInput) rawDataInput.value = preset.data;
 
     this.tableGrid.setAngleMultiplier(preset.multiplier);
     this.store.setState({ currentDatasetName: preset.name });
+    this.currentPresetKey = presetKey;
+
+    // 偏振数据配置联动（autoLoadImage = false: 极坐标优先呈现，不自动灌入虚构底图）
+    this.overlayManager?.loadPresetBundle(presetKey, preset, false);
+
     this.ingestText(preset.data, preset.multiplier, { sourceType: 'example', fileName: `${presetKey}.txt`, encoding: 'embedded UTF-8' });
   }
 
@@ -474,6 +1129,12 @@ class PolarizationApp {
     this.resetDerivedDisplays();
     this.setExportAvailability(false);
     this.updateSourceFingerprintDisplay();
+
+    const step1Badge = document.getElementById('step1OptStatusBadge');
+    if (step1Badge) {
+      step1Badge.textContent = '等待导入数据或选择预设';
+      step1Badge.className = 'badge badge-secondary';
+    }
   }
 
   ingestText(text, multiplier, source = {}) {
@@ -621,6 +1282,7 @@ class PolarizationApp {
       this.resetDerivedDisplays();
       this.setExportAvailability(false);
       if (this.chartManager) this.chartManager.clearCharts();
+      if (this.overlayManager) this.overlayManager.setData(null);
       const empty = document.getElementById('emptyWorkspaceState');
       if (empty) empty.style.display = 'flex';
       return;
@@ -728,6 +1390,9 @@ class PolarizationApp {
         groups,
         activeGroups,
         stats,
+        summary: stats?.summary || null,
+        metadata: this.getExperimentMetadata(),
+        polarFit: fitResult,
         fitResult: qualityAudit.claimLevel === 'blocked' ? null : fitResult,
         diagnosticFitResult: fitResult,
         qualityAudit,
@@ -773,6 +1438,9 @@ class PolarizationApp {
       // 6. 渲染图表
       this.applyFilterConfig();
       this.chartManager.updateData(this.parsedState);
+      if (this.overlayManager) {
+        this.overlayManager.setData(this.parsedState);
+      }
       if (qualityAudit.claimLevel === 'blocked') this.setBlockedDerivedDisplays();
       this.setExportAvailability(true, Boolean(stats));
       const empty = document.getElementById('emptyWorkspaceState');
@@ -858,9 +1526,9 @@ class PolarizationApp {
 
   getAppVersion() {
     try {
-      return typeof chrome !== 'undefined' && chrome.runtime?.getManifest ? chrome.runtime.getManifest().version : '3.0-development';
+      return typeof chrome !== 'undefined' && chrome.runtime?.getManifest ? chrome.runtime.getManifest().version : '3.1.0';
     } catch (e) {
-      return '3.0-development';
+      return '3.1.0';
     }
   }
 
@@ -895,7 +1563,7 @@ class PolarizationApp {
       const el = document.getElementById(id);
       if (el) el.disabled = !enabled;
     });
-    ['btnGenerateReport', 'btnExportPng', 'btnExportSvg'].forEach(id => {
+    ['btnGenerateReport', 'btnExportPng', 'btnExportSvg', 'btnOverlayExportPng'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.disabled = !hasStatistics;
     });

@@ -80,6 +80,7 @@ js/core/parser.js              Parsing, slicing, and statistics
 js/core/data-quality.js        Quality checks and claim boundaries
 js/algorithms/                 Baseline, filter, and fitting engines
 js/ui/chart-manager.js         Interactive visualizations
+js/ui/overlay-manager.js       Micro-area polar plot & optical micrograph overlay engine
 js/ui/report-engine.js         PDF/HTML report generation
 js/core/xlsx-exporter.js       OriginPro-friendly Excel export
 Pol.txt                        Optional measured example
@@ -87,4 +88,4 @@ Pol.txt                        Optional measured example
 
 ## Version
 
-Current extension version: **v3.0.0**.
+Current extension version: **v3.1.0**.

@@ -9,6 +9,14 @@ const PolarizationPresets = {
     name: '实测数据 (Pol.txt - 旋转两周 73 点)',
     description: '半波片旋转测量的真实实验数据，包含探测器本底暗电流与微弱机械旋转偏差。',
     multiplier: 10,
+    micrograph: {
+      type: 'real_pol',
+      sampleName: 'ReS₂ 晶体微片 (SiO₂/Si 基底)',
+      alignRotation: 36,
+      defaultScale: 0.38,
+      dynamicRange: true,
+      description: '100× 显微物镜实拍，基底 300nm SiO₂/Si，微片具天然各向异性解理棱（偏角 ~36°）与微区激光聚焦点。'
+    },
     // Canonical source: Pol.txt.  Keep this literal content aligned with
     // the shipped sample; a prior divergent copy created false cycle mismatch.
     data: `0\t7119
@@ -91,6 +99,14 @@ const PolarizationPresets = {
     name: '理论仿真: 理想 1/2 波片 (消光比极优)',
     description: '理想半波片马吕斯定律理论曲线，I(θ) = (I0/2)[1 + cos(4(θ - 15°))]，消光比趋于无穷。',
     multiplier: 10,
+    micrograph: {
+      type: 'ideal_hwp',
+      sampleName: 'Quartz 晶体波片 (理想仿真)',
+      alignRotation: 15,
+      defaultScale: 0.38,
+      dynamicRange: false,
+      description: '精密石英晶体双折射微纳器件，光学通光孔径微观视场（快轴取向 15°）。'
+    },
     data: Array.from({ length: 73 }, (_, i) => {
       const theta = (i * 10 * Math.PI) / 180;
       const theta0 = (15 * Math.PI) / 180;
@@ -104,6 +120,14 @@ const PolarizationPresets = {
     name: '误差仿真: 相位延迟偏差波片 (δ=165°)',
     description: '波片制作厚度偏差导致相位延迟并非精确 180°，出射为椭圆偏振光，产生残余光强。',
     multiplier: 10,
+    micrograph: {
+      type: 'retardance_error',
+      sampleName: '应变各向异性薄片 (δ=165°)',
+      alignRotation: 0,
+      defaultScale: 0.38,
+      dynamicRange: true,
+      description: '应变诱导双折射条纹的各向异性薄片，显示局部相位延迟偏差特征。'
+    },
     data: Array.from({ length: 73 }, (_, i) => {
       const theta = (i * 10 * Math.PI) / 180;
       const delta = (165 * Math.PI) / 180;
@@ -120,6 +144,14 @@ const PolarizationPresets = {
     name: '漂移仿真: 光源线性功率漂移样本',
     description: '模拟激光器发热或电池电量下降导致的单调线性功率衰减 (Drift)。',
     multiplier: 10,
+    micrograph: {
+      type: 'linear_drift',
+      sampleName: '激光光热漂移样本',
+      alignRotation: 11.5,
+      defaultScale: 0.38,
+      dynamicRange: true,
+      description: '连续激光微区照射导致的热积聚与功率衰减演化视场。'
+    },
     data: Array.from({ length: 73 }, (_, i) => {
       const theta = (i * 10 * Math.PI) / 180;
       const drift = -3.5 * i + 7200;

@@ -1,5 +1,27 @@
 # Changelog
 
+## v3.1.0 - 2026-09-17
+
+### Added
+- Micro-area polar plot & optical micrograph overlay engine (Tab 7: 样品叠加).
+- Prioritized polar plot presentation with clean darkroom coordinate grid and subtle lab micro-dots.
+- Fully on-demand optical micrograph loading with drag-and-drop, file chooser, and preset linkage buttons.
+- Optical micrograph Pan & Zoom (Ctrl + Wheel to zoom, Middle-click / Ctrl + Left-drag to pan).
+- Fast-axis angle and crystal cleavage offset angle Delta-theta = |theta_max - theta_align| real-time solver in academic info badge.
+- Billboarded upright text rendering for angle labels (0°, 90°, 180°, 270°) and fast axis callouts during rotation.
+- Quick rotation steppers (-5° / -1° / 0° / +1° / +5°) and Shift + Wheel smooth rotation for crystal alignment.
+- Canvas overlay quick HUD drawer with 4-corner anti-occlusion docking.
+- High-contrast scientific color themes (Emerald, Amber, Platinum, PRL, IEEE, Dark Lab).
+- Publication-grade 4K / 300DPI lossless image export (.png, .jpg, .webp).
+
+### Fixed
+- Fixed scientific metric discrepancy: unified Malus fit peak angle across fast-axis rays, academic badges, and summary cards to theta_max = 103.2°.
+- Removed automatic injection of synthetic reference micrographs on initialization and preset switching.
+- Resolved canvas label inversion during rotation by introducing screen-aligned billboarded transforms.
+
+### Compatibility
+- Fully backward compatible with v3.0.0 recipes, datasets, and exports.
+
 ## v3.0.0 - 2026-08-19
 
 ### Added

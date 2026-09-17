@@ -47,10 +47,27 @@
   border-color: var(--primary-500);
 }
 
+.btn-ghost {
+  background: transparent;
+  color: var(--text-muted);
+  border-color: transparent;
+}
+
+.btn-ghost:hover {
+  background: var(--bg-app);
+  color: var(--primary-600);
+}
+
 .btn-sm {
   padding: 0.28rem 0.55rem;
   font-size: 0.72rem;
   border-radius: 5px;
+}
+
+.btn-xs {
+  padding: 0.16rem 0.38rem;
+  font-size: 0.68rem;
+  border-radius: 4px;
 }
 
 /* 2. 顶部实时 KPI 指标横幅 (Live KPI Ribbon - 单行水平排布) */
@@ -59,7 +76,9 @@
   flex-wrap: nowrap;
   align-items: center;
   gap: 0.45rem;
-  background: var(--bg-surface);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: 0.35rem 0.65rem;
@@ -73,13 +92,22 @@
 .kpi-item {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.2rem 0.5rem;
-  background: var(--bg-app);
+  gap: 0.45rem;
+  padding: 0.22rem 0.55rem;
+  background: var(--bg-surface);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-subtle);
+  border-left: 2.5px solid var(--primary-500);
   white-space: nowrap;
   flex-shrink: 0;
+  transition: all 0.14s ease;
+}
+
+.kpi-item:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+  border-color: var(--border-strong);
+  border-left-color: var(--primary-600);
 }
 
 .kpi-icon {
@@ -322,21 +350,33 @@
 
 .range-slider {
   width: 100%;
-  height: 5px;
-  border-radius: 3px;
+  height: 6px;
+  border-radius: 4px;
   background: var(--border-strong);
   outline: none;
   -webkit-appearance: none;
+  transition: background 0.15s ease;
 }
 
 .range-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
   border-radius: 50%;
   background: var(--primary-600);
   cursor: pointer;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
+}
+
+.range-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.18);
+  background: var(--primary-500);
+  box-shadow: 0 0 8px rgba(37, 99, 235, 0.5);
+}
+
+.range-slider:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35);
 }
 
 .slider-val {
