@@ -1,5 +1,17 @@
 # Changelog
 
+## v3.1.2 - 2026-09-17
+
+### Added
+- Keyboard hotkey toggles for overlay mirroring: press `X` to toggle horizontal flip and `Y` to toggle vertical flip in real-time.
+- Touch screen and tablet gesture support: single-finger drag to position and two-finger pinch to smoothly scale micrographs/polar plots on laboratory touch devices.
+- Scientific provenance watermark tag in academic card: displays `[X-Flip]`, `[Y-Flip]`, or `[XY-Flip]` on canvas.
+- Traceable export file naming: 4K exported images automatically append `_xflip`, `_yflip`, or `_xyflip` to their filenames.
+
+### Fixed
+- Added canvas boundary bounding-box check on mouse release to prevent erratic click-to-locate shifts when dragging outside window borders.
+- Explicitly reset image pan and zoom offsets when importing new local image files.
+
 ## v3.1.1 - 2026-09-17
 
 ### Added

@@ -204,6 +204,79 @@ class PolarOverlayManager {
         }
       });
     }
+
+    // 实验室触屏与平板手势交互支持 (Touch Events)
+    this.canvas.addEventListener('touchstart', (e) => this.handleTouchStart(e), { passive: false });
+    this.canvas.addEventListener('touchmove', (e) => this.handleTouchMove(e), { passive: false });
+    this.canvas.addEventListener('touchend', (e) => this.handleTouchEnd(e), { passive: false });
+  }
+
+  handleTouchStart(e) {
+    if (!e.touches) return;
+    if (e.touches.length === 1) {
+      const t = e.touches[0];
+      this.handleMouseDown({
+        clientX: t.clientX,
+        clientY: t.clientY,
+        button: 0,
+        ctrlKey: false,
+        altKey: false,
+        shiftKey: false
+      });
+    } else if (e.touches.length === 2) {
+      e.preventDefault();
+      this.isPinching = true;
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      this.initialPinchDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      this.initialPinchScale = this.overlayConfig.scale;
+      this.initialPinchZoom = this.imageZoom || 1.0;
+    }
+  }
+
+  handleTouchMove(e) {
+    if (!e.touches) return;
+    if (this.isPinching && e.touches.length === 2) {
+      e.preventDefault();
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const currentDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      if (this.initialPinchDist > 0) {
+        const factor = currentDist / this.initialPinchDist;
+        if (this.image) {
+          this.imageZoom = Math.max(0.1, Math.min(6.0, parseFloat((this.initialPinchZoom * factor).toFixed(3))));
+        } else {
+          this.overlayConfig.scale = Math.max(0.1, Math.min(1.5, parseFloat((this.initialPinchScale * factor).toFixed(3))));
+          if (this.onConfigChange) this.onConfigChange(this.overlayConfig);
+        }
+        this.render();
+      }
+      return;
+    }
+
+    if (e.touches.length === 1) {
+      const t = e.touches[0];
+      this.handleMouseMove({
+        clientX: t.clientX,
+        clientY: t.clientY
+      });
+    }
+  }
+
+  handleTouchEnd(e) {
+    if (this.isPinching) {
+      this.isPinching = false;
+      return;
+    }
+    if (e.changedTouches && e.changedTouches.length > 0) {
+      const t = e.changedTouches[0];
+      this.handleMouseUp({
+        clientX: t.clientX,
+        clientY: t.clientY
+      });
+    } else {
+      this.handleMouseUp();
+    }
   }
 
   handleMouseDown(e) {
@@ -333,15 +406,21 @@ class PolarOverlayManager {
         const rect = this.canvas.getBoundingClientRect();
         const rw = rect.width || this.canvas.width || 800;
         const rh = rect.height || this.canvas.height || 600;
-        const scaleFactorX = this.canvas.width / rw;
-        const scaleFactorY = this.canvas.height / rh;
-        const clickCanvasX = (e.clientX - rect.left) * scaleFactorX;
-        const clickCanvasY = (e.clientY - rect.top) * scaleFactorY;
-        
-        this.overlayConfig.offsetX = Math.round(clickCanvasX - this.canvas.width / 2);
-        this.overlayConfig.offsetY = Math.round(clickCanvasY - this.canvas.height / 2);
-        if (this.onConfigChange) this.onConfigChange(this.overlayConfig);
-        this.render();
+        const isInsideCanvas = (
+          e.clientX >= rect.left && e.clientX <= rect.right &&
+          e.clientY >= rect.top && e.clientY <= rect.bottom
+        );
+        if (isInsideCanvas) {
+          const scaleFactorX = this.canvas.width / rw;
+          const scaleFactorY = this.canvas.height / rh;
+          const clickCanvasX = (e.clientX - rect.left) * scaleFactorX;
+          const clickCanvasY = (e.clientY - rect.top) * scaleFactorY;
+          
+          this.overlayConfig.offsetX = Math.round(clickCanvasX - this.canvas.width / 2);
+          this.overlayConfig.offsetY = Math.round(clickCanvasY - this.canvas.height / 2);
+          if (this.onConfigChange) this.onConfigChange(this.overlayConfig);
+          this.render();
+        }
       }
       this.isDragging = false;
       if (this.canvas) this.canvas.style.cursor = 'grab';
@@ -374,6 +453,9 @@ class PolarOverlayManager {
         this.image = img;
         this.imageName = file.name;
         this.isSampleImage = false;
+        this.imagePanX = 0;
+        this.imagePanY = 0;
+        this.imageZoom = 1.0;
         this.resetOverlayPosition();
         this.resize();
         this.render();
@@ -1400,7 +1482,7 @@ class PolarOverlayManager {
     ctx.save();
 
     const pad = 16;
-    const cardW = 240;
+    const cardW = 256;
     const cardH = 88;
     const corner = this.overlayConfig.badgeCorner || 'bottom-right';
 
@@ -1466,6 +1548,12 @@ class PolarOverlayManager {
 
     const r2Val = p?.rSquaredPercent ? `${p.rSquaredPercent}%` : (p?.rSquared ? `${(p.rSquared * 100).toFixed(1)}%` : null);
 
+    const flipTag = (this.imageFilters.flipX && this.imageFilters.flipY)
+      ? ' · 镜像: X+Y'
+      : (this.imageFilters.flipX
+        ? ' · 镜像: X轴'
+        : (this.imageFilters.flipY ? ' · 镜像: Y轴' : ''));
+
     ctx.fillStyle = '#f8fafc';
     ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
     ctx.textAlign = 'left';
@@ -1481,10 +1569,10 @@ class PolarOverlayManager {
 
     if (Number.isFinite(numDolp)) {
       ctx.fillStyle = '#4ade80';
-      ctx.fillText(`DoLP: ${(numDolp * 100).toFixed(1)}% (调制度代理)`, cardX + 12, cardY + 70);
+      ctx.fillText(`DoLP: ${(numDolp * 100).toFixed(1)}% (调制度)${flipTag}`, cardX + 12, cardY + 70);
     } else {
       ctx.fillStyle = this.image ? '#a78bfa' : '#64748b';
-      ctx.fillText(this.image ? '底图: 已叠加光学显微图' : '底图: 待导入光学显微图', cardX + 12, cardY + 70);
+      ctx.fillText(this.image ? `底图: 已叠加光学显微图${flipTag}` : '底图: 待导入光学显微图', cardX + 12, cardY + 70);
     }
 
     ctx.restore();
@@ -1582,7 +1670,8 @@ class PolarOverlayManager {
 
     const sampleName = this.polarData?.metadata?.sampleId ? `_${this.polarData.metadata.sampleId}` : '';
     const dateStamp = new Date().toISOString().slice(0, 10);
-    const finalName = filename || `polar_micrograph_overlay${sampleName}_${dateStamp}.${format}`;
+    const flipTag = (this.imageFilters.flipX && this.imageFilters.flipY) ? '_xyflip' : (this.imageFilters.flipX ? '_xflip' : (this.imageFilters.flipY ? '_yflip' : ''));
+    const finalName = filename || `polar_micrograph_overlay${sampleName}${flipTag}_${dateStamp}.${format}`;
 
     const link = document.createElement('a');
     link.href = dataUrl;

@@ -805,10 +805,10 @@
                 <button id="btnOverlayResetPos" class="btn btn-secondary btn-sm" type="button" title="将极坐标图精准对准到样品晶片/激光斑中心 (快捷键 R)">
                   <svg class="ui-icon"><use href="#i-vector"/></svg>对准微区中心
                 </button>
-                <button id="btnOverlayFlipX" class="btn btn-secondary btn-sm" type="button" title="水平镜像翻转光学底图 (X轴左右镜像，适配反射式显微镜光路)">
+                <button id="btnOverlayFlipX" class="btn btn-secondary btn-sm" type="button" title="水平镜像翻转光学底图 (X轴左右镜像，适配反射式显微镜光路，快捷键 X)">
                   <svg class="ui-icon"><use href="#i-flip-x"/></svg>X 镜像
                 </button>
-                <button id="btnOverlayFlipY" class="btn btn-secondary btn-sm" type="button" title="垂直镜像翻转光学底图 (Y轴上下镜像，适配相机倒置安装)">
+                <button id="btnOverlayFlipY" class="btn btn-secondary btn-sm" type="button" title="垂直镜像翻转光学底图 (Y轴上下镜像，适配相机倒置安装，快捷键 Y)">
                   <svg class="ui-icon"><use href="#i-flip-y"/></svg>Y 镜像
                 </button>
               </div>
@@ -825,16 +825,17 @@
                 </div>
               </div>
 
+              <!-- 出版级导出与控制抽屉触发器 -->
               <div class="overlay-bar-group">
-                <button id="btnToggleOverlayHud" class="btn btn-secondary btn-sm" type="button" title="展开/收起极坐标叠加微调 HUD 面板">
+                <button id="btnToggleOverlayHud" class="btn btn-secondary btn-sm" type="button" title="展开微调与外观抽屉 (快捷调节不透明度、尺寸、配色主题、图层与信息卡方位)">
                   <svg class="ui-icon"><use href="#i-sliders"/></svg>叠加调控
                 </button>
-                <button id="btnOverlayFullscreen" class="btn btn-secondary btn-sm" type="button" title="全屏沉浸式微区分析 (快捷键 F)">
+                <button id="btnOverlayFullscreen" class="btn btn-secondary btn-sm" type="button" title="全屏沉浸微区分析模式 (快捷键 F)">
                   <svg class="ui-icon"><use href="#i-fullscreen"/></svg>全屏
                 </button>
                 <span id="overlayImageStatus" class="overlay-status-badge">极坐标图优先呈现 · 待导入底图</span>
-                <button id="btnOverlayExportPng" class="btn btn-primary btn-sm" type="button" title="导出出版级 300DPI 超清叠加图">
-                  <svg class="ui-icon"><use href="#i-image"/></svg>导出 4K 叠加图
+                <button id="btnOverlayExportPng" class="btn btn-primary btn-sm" type="button" title="导出出版级 300DPI 4K 高分辨率融合图 (无损 PNG)">
+                  <svg class="ui-icon"><use href="#i-download"/></svg>导出 4K 叠加图
                 </button>
               </div>
             </div>
@@ -842,21 +843,21 @@
             <div class="overlay-canvas-wrapper">
               <canvas id="overlayCanvas"></canvas>
 
-              <!-- 画布右上角快捷微调 HUD 浮动抽屉 -->
-              <div id="overlayQuickHud" class="overlay-quick-hud" style="display: none;">
+              <!-- 右侧浮层微调控制抽屉 (Quick HUD Drawer) -->
+              <div id="overlayQuickHud" class="overlay-quick-hud" style="display:none;">
                 <div class="hud-header">
                   <span class="hud-title"><svg class="ui-icon"><use href="#i-sliders"/></svg>极坐标叠加微调 HUD</span>
-                  <button id="btnCloseOverlayHud" class="hud-close-btn" type="button" title="收起面板">×</button>
+                  <button id="btnCloseOverlayHud" class="hud-close-btn" type="button" title="收起抽屉">×</button>
                 </div>
                 <div class="hud-body">
-                  <!-- 1. 基底适配配色方案 (特别推荐在粉红微观图下使用 翡翠绿 或 琥珀金) -->
+                  <!-- 1. 显微底图高对比适配色板 -->
                   <div class="hud-section">
                     <div class="hud-label"><svg class="ui-icon"><use href="#i-palette"/></svg>基底适配配色方案</div>
                     <div class="hud-theme-pills">
-                      <button class="hud-theme-pill active" data-theme="nature" title="经典紫/红学术方案">Nature</button>
-                      <button class="hud-theme-pill" data-theme="emerald" title="翡翠绿 (超高对比度，最适合粉红/明亮晶片基底！)">翡翠绿</button>
-                      <button class="hud-theme-pill" data-theme="science" title="蓝青色 Cell/Science 方案">青蓝</button>
-                      <button class="hud-theme-pill" data-theme="amber" title="琥珀金 (鲜明暖金)">琥珀金</button>
+                      <button class="hud-theme-pill active" data-theme="nature" title="自然紫色经典版">Nature</button>
+                      <button class="hud-theme-pill" data-theme="emerald" title="翡翠绿晶格增强">翡翠绿</button>
+                      <button class="hud-theme-pill" data-theme="science" title="青蓝高对比科研版">青蓝</button>
+                      <button class="hud-theme-pill" data-theme="amber" title="暗场金晶体版">琥珀金</button>
                       <button class="hud-theme-pill" data-theme="prl" title="PRL 经典深红物理风">PRL</button>
                       <button class="hud-theme-pill" data-theme="dark_lab" title="荧光暗室暗夜霓虹">暗室霓虹</button>
                       <button class="hud-theme-pill" data-theme="high_contrast" title="极光高反差">高反差</button>
@@ -930,7 +931,7 @@
                 <span id="overlayToastText">已切换到样品叠加视图</span>
               </div>
               <div id="overlayDragHint" class="overlay-drag-hint">
-                <span>🎯 单击吸附中心 · 左键拖拽平移 · 滚轮缩放 · Shift+滚轮旋转对准晶棱 · F 全屏</span>
+                <span>🎯 单击吸附中心 · 左键拖拽平移 · 滚轮缩放 · Shift+滚轮旋转 · X/Y 轴镜像 · F 全屏</span>
                 <button id="btnDismissOverlayHint" class="hint-close-btn" type="button" title="忽略提示">×</button>
               </div>
             </div>

@@ -879,6 +879,14 @@ class PolarizationApp {
       } else if (e.key === 'r' || e.key === 'R') {
         e.preventDefault();
         btnResetPos?.click();
+      } else if (e.key === 'x' || e.key === 'X') {
+        e.preventDefault();
+        const btnFlipX = document.getElementById('btnOverlayFlipX');
+        btnFlipX?.click();
+      } else if (e.key === 'y' || e.key === 'Y') {
+        e.preventDefault();
+        const btnFlipY = document.getElementById('btnOverlayFlipY');
+        btnFlipY?.click();
       }
     });
 

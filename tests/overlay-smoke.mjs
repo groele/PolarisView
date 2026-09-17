@@ -157,6 +157,14 @@ frame.addEventListener('load',async()=>{
   const sideXAfterClear = chkSideX.checked;
   const sideYAfterClear = chkSideY.checked;
 
+  // 11.5 验证键盘快捷键 X 与 Y 独立切换镜像
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'x', bubbles: true }));
+  const flipXAfterKey = w.app.overlayManager.imageFilters.flipX;
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'y', bubbles: true }));
+  const flipYAfterKey = w.app.overlayManager.imageFilters.flipY;
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'X', bubbles: true }));
+  const flipXAfterToggleBack = w.app.overlayManager.imageFilters.flipX;
+
   document.getElementById('result').textContent=JSON.stringify({
     activeView,
     overlayVisible,
@@ -204,7 +212,10 @@ frame.addEventListener('load',async()=>{
     flipXAfterClear,
     flipYAfterClear,
     sideXAfterClear,
-    sideYAfterClear
+    sideYAfterClear,
+    flipXAfterKey,
+    flipYAfterKey,
+    flipXAfterToggleBack
   });
 });
 </script>`;
@@ -297,7 +308,12 @@ try {
   assert.equal(res.sideXAfterClear, false);
   assert.equal(res.sideYAfterClear, false);
 
-  console.log('PASS overlay smoke: preset bundle linkage, auto view-switch on upload, Step1 thumbnail preview, click-to-locate, dynamic range, 4K export, quick rotation steppers, HUD drawer, and X/Y mirror flips');
+  // 断言键盘快捷键 X 与 Y 响应与切换
+  assert.equal(res.flipXAfterKey, true);
+  assert.equal(res.flipYAfterKey, true);
+  assert.equal(res.flipXAfterToggleBack, false);
+
+  console.log('PASS overlay smoke: preset bundle linkage, auto view-switch on upload, Step1 thumbnail preview, click-to-locate, dynamic range, 4K export, quick rotation steppers, HUD drawer, and X/Y mirror flips with shortcuts');
 } finally {
   server.close();
 }
