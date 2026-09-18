@@ -8,7 +8,7 @@ const candidate = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const sample = await readFile('Pol.txt', 'utf8');
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.txt': 'text/plain' };
 
-const runner = `<!doctype html><meta charset="utf-8"><title>RUNNING</title><iframe id="app" src="/index.html"></iframe><pre id="result">RUNNING</pre><script>
+const runner = `<!doctype html><meta charset="utf-8"><title>RUNNING</title><style>iframe{width:390px;height:844px;border:0}</style><iframe id="app" src="/index.html"></iframe><pre id="result">RUNNING</pre><script>
 const frame=document.getElementById('app');
 frame.addEventListener('load',async()=>{
   const w=frame.contentWindow,d=frame.contentDocument;
@@ -112,6 +112,14 @@ frame.addEventListener('load',async()=>{
 
   d.getElementById('btnToggleOverlayHud').click();
   const hudVisible = getComputedStyle(d.getElementById('overlayQuickHud')).display !== 'none';
+  const hudExpanded = d.getElementById('btnToggleOverlayHud').getAttribute('aria-expanded');
+  const hudAriaHidden = d.getElementById('overlayQuickHud').getAttribute('aria-hidden');
+  const hudRect = d.getElementById('overlayQuickHud').getBoundingClientRect();
+  const hudWithinViewport = hudRect.left >= -1 && hudRect.right <= d.documentElement.clientWidth + 1;
+  const toolbarPosition = getComputedStyle(d.querySelector('.overlay-floating-bar')).position;
+  const toolbarRect = d.querySelector('.overlay-floating-bar').getBoundingClientRect();
+  const canvasWrapRect = d.querySelector('.overlay-canvas-wrapper').getBoundingClientRect();
+  const toolbarDoesNotCoverCanvas = toolbarRect.bottom <= canvasWrapRect.top + 1;
 
   d.querySelector('.hud-theme-pill[data-theme="emerald"]').click();
   const themeAfterClick = w.app.overlayManager.overlayConfig.theme;
@@ -121,6 +129,7 @@ frame.addEventListener('load',async()=>{
 
   d.getElementById('btnOverlayFullscreen').click();
   const cardHasFullscreen = d.getElementById('overlayChartCard').classList.contains('is-fullscreen');
+  const fullscreenPressed = d.getElementById('btnOverlayFullscreen').getAttribute('aria-pressed');
   d.getElementById('btnOverlayFullscreen').click(); // toggle back
 
   // 11. 验证 X 轴 (水平) 与 Y 轴 (垂直) 镜像翻转控制与多端同步
@@ -193,6 +202,31 @@ frame.addEventListener('load',async()=>{
   const sliderValAfterReset = Number(quickSlider.value);
   const inputValAfterReset = Number(quickInput.value);
 
+  // 13. 验证画布键盘操作、语义状态与 Escape 收起/退出
+  const canvasTabIndex = canvas.getAttribute('tabindex');
+  const canvasRole = canvas.getAttribute('role');
+  const offsetBeforeKeyboard = w.app.overlayManager.overlayConfig.offsetX;
+  canvas.focus();
+  canvas.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'ArrowRight', shiftKey: true, bubbles: true }));
+  const offsetAfterKeyboard = w.app.overlayManager.overlayConfig.offsetX;
+  const scaleBeforeKeyboard = w.app.overlayManager.overlayConfig.scale;
+  canvas.dispatchEvent(new w.KeyboardEvent('keydown', { key: '+', bubbles: true }));
+  const scaleAfterKeyboard = w.app.overlayManager.overlayConfig.scale;
+
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  const hudHiddenAfterEscape = getComputedStyle(d.getElementById('overlayQuickHud')).display === 'none';
+  const hudExpandedAfterEscape = d.getElementById('btnToggleOverlayHud').getAttribute('aria-expanded');
+
+  d.getElementById('btnOverlayFullscreen').click();
+  canvas.focus();
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  const fullscreenClosedByEscape = !d.getElementById('overlayChartCard').classList.contains('is-fullscreen');
+  const fullscreenPressedAfterEscape = d.getElementById('btnOverlayFullscreen').getAttribute('aria-pressed');
+
+  const emeraldPressed = d.querySelector('.hud-theme-pill[data-theme="emerald"]').getAttribute('aria-pressed');
+  const topLeftPressed = d.querySelector('.hud-dock-btn[data-corner="top-left"]').getAttribute('aria-pressed');
+  const grayPressed = d.getElementById('btnHudFilterGray').getAttribute('aria-pressed');
+
   document.getElementById('result').textContent=JSON.stringify({
     activeView,
     overlayVisible,
@@ -224,9 +258,15 @@ frame.addEventListener('load',async()=>{
     rotBeforeP5,
     rotAfterP5,
     hudVisible,
+    hudExpanded,
+    hudAriaHidden,
+    hudWithinViewport,
+    toolbarPosition,
+    toolbarDoesNotCoverCanvas,
     themeAfterClick,
     cornerAfterClick,
     cardHasFullscreen,
+    fullscreenPressed,
     flipXAfterBtn,
     sideXAfterBtn,
     hudXAfterBtn,
@@ -253,7 +293,20 @@ frame.addEventListener('load',async()=>{
     inputValAfterStepper,
     rotAfterReset,
     sliderValAfterReset,
-    inputValAfterReset
+    inputValAfterReset,
+    canvasTabIndex,
+    canvasRole,
+    offsetBeforeKeyboard,
+    offsetAfterKeyboard,
+    scaleBeforeKeyboard,
+    scaleAfterKeyboard,
+    hudHiddenAfterEscape,
+    hudExpandedAfterEscape,
+    fullscreenClosedByEscape,
+    fullscreenPressedAfterEscape,
+    emeraldPressed,
+    topLeftPressed,
+    grayPressed
   });
 });
 </script>`;
@@ -323,9 +376,15 @@ try {
   // 断言快捷步进器、HUD 面板、翡翠绿配色与全屏
   assert.equal(res.rotAfterP5, res.rotBeforeP5 + 5);
   assert.equal(res.hudVisible, true);
+  assert.equal(res.hudExpanded, 'true');
+  assert.equal(res.hudAriaHidden, 'false');
+  assert.equal(res.hudWithinViewport, true);
+  assert.equal(res.toolbarPosition, 'relative');
+  assert.equal(res.toolbarDoesNotCoverCanvas, true);
   assert.equal(res.themeAfterClick, 'emerald');
   assert.equal(res.cornerAfterClick, 'top-left');
   assert.equal(res.cardHasFullscreen, true);
+  assert.equal(res.fullscreenPressed, 'true');
 
   // 断言 X/Y 轴独立镜像翻转、多端双向同步与滤镜联动保持
   assert.equal(res.flipXAfterBtn, true);
@@ -363,7 +422,20 @@ try {
   assert.equal(res.sliderValAfterReset, 0);
   assert.equal(res.inputValAfterReset, 0);
 
-  console.log('PASS overlay smoke: preset bundle linkage, auto view-switch on upload, Step1 thumbnail preview, click-to-locate, dynamic range, 4K export, quick rotation steppers, HUD drawer, X/Y mirror flips, and rotation slider/input sync');
+  // 断言画布键盘可达性、窄屏语义状态与 Escape 行为
+  assert.equal(res.canvasTabIndex, '0');
+  assert.equal(res.canvasRole, 'application');
+  assert.ok(res.offsetAfterKeyboard > res.offsetBeforeKeyboard);
+  assert.ok(res.scaleAfterKeyboard > res.scaleBeforeKeyboard);
+  assert.equal(res.hudHiddenAfterEscape, true);
+  assert.equal(res.hudExpandedAfterEscape, 'false');
+  assert.equal(res.fullscreenClosedByEscape, true);
+  assert.equal(res.fullscreenPressedAfterEscape, 'false');
+  assert.equal(res.emeraldPressed, 'true');
+  assert.equal(res.topLeftPressed, 'true');
+  assert.equal(res.grayPressed, 'true');
+
+  console.log('PASS overlay smoke: preset linkage, upload flow, 4K export, rotation sync, mirror controls, responsive HUD bounds, ARIA state, keyboard canvas controls, and Escape behavior');
 } finally {
   server.close();
 }

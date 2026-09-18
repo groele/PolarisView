@@ -1,5 +1,12 @@
 # Changelog
 
+## v3.1.5 - 2026-09-18
+
+### Changed
+- Reworked the sample-overlay toolbar and HUD for narrow screens so controls remain inside the viewport without covering the canvas.
+- Added keyboard canvas nudging, accessible control names, live state semantics, focus handling, and Escape-to-close behavior for the overlay workflow.
+- Coalesced rotation and resize rendering through `requestAnimationFrame`, cached unchanged canvas dimensions, and observed container resizing to avoid redundant bitmap reallocations.
+
 ## v3.1.4 - 2026-09-17
 
 ### Added

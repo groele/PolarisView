@@ -286,6 +286,8 @@ html, body {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 /* 对齐偏角控制器集群：滑移模块与输入模块 */
@@ -448,6 +450,11 @@ html, body {
   cursor: grab;
   user-select: none;
   touch-action: none;
+}
+
+#overlayCanvas:focus-visible {
+  outline: 3px solid #38bdf8;
+  outline-offset: -4px;
 }
 
 /* 画布微调快捷 HUD 悬浮抽屉 */
@@ -764,3 +771,100 @@ html, body {
   to { opacity: 1; transform: translate(-50%, 0); }
 }
 
+/* 窄屏时让工具条参与布局，避免覆盖画布；HUD 始终约束在可视区域内。 */
+@media (max-width: 900px) {
+  .overlay-floating-bar {
+    position: relative;
+    inset: auto;
+    flex: 0 0 auto;
+    align-items: stretch;
+    justify-content: flex-start;
+    max-height: 190px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    border-radius: 0;
+    border-top: 0;
+    border-left: 0;
+    border-right: 0;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  }
+
+  .overlay-bar-group {
+    flex-wrap: wrap;
+  }
+
+  .overlay-rot-group {
+    order: 3;
+    width: 100%;
+  }
+
+  .overlay-rot-slider-wrap {
+    flex: 1 1 100px;
+  }
+
+  .overlay-rot-slider {
+    width: 100%;
+    min-width: 90px;
+  }
+
+  .overlay-quick-hud {
+    top: 0.6rem;
+    right: 0.6rem;
+    width: min(320px, calc(100% - 1.2rem));
+    max-height: calc(100% - 1.2rem);
+  }
+}
+
+@media (max-width: 520px) {
+  .overlay-floating-bar {
+    padding: 0.45rem;
+    gap: 0.45rem;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .overlay-bar-group {
+    width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 0.15rem;
+    scrollbar-width: thin;
+  }
+
+  .overlay-bar-group:last-child {
+    justify-content: flex-start;
+  }
+
+  .overlay-status-badge {
+    flex: 0 0 auto;
+  }
+
+  .overlay-stepper-cluster {
+    flex: 0 0 auto;
+    margin-left: 0;
+  }
+
+  .overlay-rot-slider-wrap {
+    flex: 0 0 110px;
+  }
+
+  .overlay-quick-hud {
+    left: 0.45rem;
+    right: 0.45rem;
+    width: auto;
+  }
+
+  .hud-chips-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .overlay-drag-hint {
+    left: 0.5rem;
+    right: 0.5rem;
+    width: auto;
+    transform: none;
+    white-space: normal;
+    line-height: 1.35;
+  }
+}

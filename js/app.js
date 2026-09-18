@@ -376,11 +376,11 @@ class PolarizationApp {
         if (overlayContainer) overlayContainer.style.display = 'flex';
         if (this.overlayManager) {
           this.overlayManager.resize();
-          this.overlayManager.render();
+          this.overlayManager.requestRender();
           requestAnimationFrame(() => {
             if (this.overlayManager) {
               this.overlayManager.resize();
-              this.overlayManager.render();
+              this.overlayManager.requestRender();
             }
           });
         }
@@ -389,9 +389,9 @@ class PolarizationApp {
       this.chartManager.render();
       setTimeout(() => {
         this.chartManager.resize();
-        if (this.overlayManager) {
+        if (this.overlayManager && this.activeView === 'overlay') {
           this.overlayManager.resize();
-          this.overlayManager.render();
+          this.overlayManager.requestRender();
         }
       }, 50);
     };
@@ -764,14 +764,21 @@ class PolarizationApp {
     const btnCloseHud = document.getElementById('btnCloseOverlayHud');
 
     if (btnToggleHud && hudPanel) {
+      const setHudOpen = (open, { restoreFocus = false } = {}) => {
+        hudPanel.style.display = open ? 'flex' : 'none';
+        hudPanel.setAttribute('aria-hidden', open ? 'false' : 'true');
+        btnToggleHud.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open) hudPanel.focus({ preventScroll: true });
+        else if (restoreFocus) btnToggleHud.focus({ preventScroll: true });
+      };
+      this.setOverlayHudOpen = setHudOpen;
       btnToggleHud.addEventListener('click', () => {
-        const isHidden = hudPanel.style.display === 'none' || !hudPanel.style.display;
-        hudPanel.style.display = isHidden ? 'flex' : 'none';
+        setHudOpen(btnToggleHud.getAttribute('aria-expanded') !== 'true');
       });
     }
     if (btnCloseHud && hudPanel) {
       btnCloseHud.addEventListener('click', () => {
-        hudPanel.style.display = 'none';
+        this.setOverlayHudOpen?.(false, { restoreFocus: true });
       });
     }
 
@@ -782,12 +789,12 @@ class PolarizationApp {
       btnFullscreen.addEventListener('click', () => {
         overlayCard.classList.toggle('is-fullscreen');
         const isFull = overlayCard.classList.contains('is-fullscreen');
+        btnFullscreen.setAttribute('aria-pressed', isFull ? 'true' : 'false');
         btnFullscreen.innerHTML = isFull
           ? '<svg class="ui-icon"><use href="#i-fullscreen"/></svg>退出全屏'
           : '<svg class="ui-icon"><use href="#i-fullscreen"/></svg>全屏';
         setTimeout(() => {
           this.overlayManager?.resize();
-          this.overlayManager?.render();
         }, 60);
       });
     }
@@ -804,8 +811,12 @@ class PolarizationApp {
     // 1.7 HUD 配色胶囊一键切换
     document.querySelectorAll('.hud-theme-pill[data-theme]').forEach(pill => {
       pill.addEventListener('click', () => {
-        document.querySelectorAll('.hud-theme-pill[data-theme]').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.hud-theme-pill[data-theme]').forEach(p => {
+          p.classList.remove('active');
+          p.setAttribute('aria-pressed', 'false');
+        });
         pill.classList.add('active');
+        pill.setAttribute('aria-pressed', 'true');
         const t = pill.dataset.theme;
         this.overlayManager?.setTheme(t);
         const journalSel = document.getElementById('journalTheme');
@@ -865,8 +876,12 @@ class PolarizationApp {
     // 1.10 HUD 学术信息卡停靠方位
     document.querySelectorAll('.hud-dock-btn[data-corner]').forEach(btn => {
       btn.addEventListener('click', () => {
-        document.querySelectorAll('.hud-dock-btn[data-corner]').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.hud-dock-btn[data-corner]').forEach(b => {
+          b.classList.remove('active');
+          b.setAttribute('aria-pressed', 'false');
+        });
         btn.classList.add('active');
+        btn.setAttribute('aria-pressed', 'true');
         this.overlayManager?.setBadgeCorner(btn.dataset.corner);
       });
     });
@@ -874,8 +889,14 @@ class PolarizationApp {
     // 1.11 HUD 图像快速滤镜
     const applyFilterMode = (mode, btn) => {
       document.querySelectorAll('#btnHudFilterNormal, #btnHudFilterContrast, #btnHudFilterGray, #btnHudFilterInvert')
-        .forEach(b => b.classList.remove('active'));
-      if (btn) btn.classList.add('active');
+        .forEach(b => {
+          b.classList.remove('active');
+          b.setAttribute('aria-pressed', 'false');
+        });
+      if (btn) {
+        btn.classList.add('active');
+        btn.setAttribute('aria-pressed', 'true');
+      }
 
       const curFlipX = Boolean(this.overlayManager?.imageFilters?.flipX);
       const curFlipY = Boolean(this.overlayManager?.imageFilters?.flipY);
@@ -931,6 +952,12 @@ class PolarizationApp {
         e.preventDefault();
         const btnFlipY = document.getElementById('btnOverlayFlipY');
         btnFlipY?.click();
+      } else if (e.key === 'Escape') {
+        if (btnToggleHud?.getAttribute('aria-expanded') === 'true') {
+          this.setOverlayHudOpen?.(false, { restoreFocus: true });
+        } else if (overlayCard?.classList.contains('is-fullscreen')) {
+          btnFullscreen?.click();
+        }
       }
     });
 
@@ -1665,9 +1692,9 @@ class PolarizationApp {
 
   getAppVersion() {
     try {
-      return typeof chrome !== 'undefined' && chrome.runtime?.getManifest ? chrome.runtime.getManifest().version : '3.1.0';
+      return typeof chrome !== 'undefined' && chrome.runtime?.getManifest ? chrome.runtime.getManifest().version : '3.1.5';
     } catch (e) {
-      return '3.1.0';
+      return '3.1.5';
     }
   }
 

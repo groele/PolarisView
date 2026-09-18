@@ -793,8 +793,8 @@
             <div id="residualChart" class="chart-canvas"></div>
           </div>
           <!-- 7. 样品光学图叠加卡片 -->
-          <div id="overlayChartCard" class="chart-card overlay-chart-card" style="display: none;">
-            <div class="overlay-floating-bar">
+          <div id="overlayChartCard" class="chart-card overlay-chart-card" role="region" aria-label="样品光学图与极坐标叠加工作区" style="display: none;">
+            <div class="overlay-floating-bar" role="toolbar" aria-label="样品叠加快捷工具">
               <div class="overlay-bar-group">
                 <label for="overlayImageInput" class="btn btn-secondary btn-sm" title="上传样品光学显微镜照片 (.png, .jpg, .webp)">
                   <svg class="ui-icon"><use href="#i-import"/></svg>导入光学图
@@ -815,16 +815,16 @@
 
               <!-- 快捷旋转对齐晶棱控制器 (支持滑移拖拽、直接输入角度与步进微调) -->
               <div class="overlay-bar-group overlay-rot-group" title="快捷微调极坐标旋转角 (支持滑移拖拽、直接输入角度、按钮微调或 Shift+滚轮 / Alt+拖拽)">
-                <span class="overlay-group-label"><svg class="ui-icon"><use href="#i-rotate"/></svg>对齐偏角:</span>
+                <span id="overlayRotationLabel" class="overlay-group-label"><svg class="ui-icon"><use href="#i-rotate"/></svg>对齐偏角:</span>
                 
                 <!-- 1. 滑移模块 (Range Slider) -->
                 <div class="overlay-rot-slider-wrap">
-                  <input type="range" id="overlayQuickRotSlider" class="overlay-rot-slider" min="-180" max="180" step="1" value="0" title="拖动滑移对齐偏角 (-180° ~ 180°)">
+                  <input type="range" id="overlayQuickRotSlider" class="overlay-rot-slider" min="-180" max="180" step="1" value="0" aria-labelledby="overlayRotationLabel" title="拖动滑移对齐偏角 (-180° ~ 180°)">
                 </div>
 
                 <!-- 2. 输入角度模块 (Number Input) -->
                 <div class="overlay-rot-input-wrap">
-                  <input type="number" id="overlayQuickRotInput" class="overlay-rot-number-input" min="-180" max="180" step="1" value="0" title="直接输入对齐偏角 (-180° ~ 180°，按回车生效)">
+                  <input type="number" id="overlayQuickRotInput" class="overlay-rot-number-input" min="-180" max="180" step="1" value="0" inputmode="numeric" aria-labelledby="overlayRotationLabel" title="直接输入对齐偏角 (-180° ~ 180°，按回车生效)">
                   <span class="overlay-rot-unit">°</span>
                 </div>
 
@@ -832,7 +832,7 @@
                 <div class="overlay-stepper-cluster">
                   <button id="btnOverlayRotM5" class="stepper-btn" type="button" title="逆时针旋转 5°">-5°</button>
                   <button id="btnOverlayRotM1" class="stepper-btn" type="button" title="逆时针微调 1°">-1°</button>
-                  <button id="btnOverlayRotReset" class="stepper-display" type="button" title="点击重置旋转角为 0°"><span id="overlayQuickRotLabel">0°</span></button>
+                  <button id="btnOverlayRotReset" class="stepper-display" type="button" aria-label="将对齐偏角重置为 0 度" title="点击重置旋转角为 0°"><span id="overlayQuickRotLabel">0°</span></button>
                   <button id="btnOverlayRotP1" class="stepper-btn" type="button" title="顺时针微调 1°">+1°</button>
                   <button id="btnOverlayRotP5" class="stepper-btn" type="button" title="顺时针旋转 5°">+5°</button>
                 </div>
@@ -840,13 +840,13 @@
 
               <!-- 出版级导出与控制抽屉触发器 -->
               <div class="overlay-bar-group">
-                <button id="btnToggleOverlayHud" class="btn btn-secondary btn-sm" type="button" title="展开微调与外观抽屉 (快捷调节不透明度、尺寸、配色主题、图层与信息卡方位)">
+                <button id="btnToggleOverlayHud" class="btn btn-secondary btn-sm" type="button" aria-expanded="false" aria-controls="overlayQuickHud" title="展开微调与外观抽屉 (快捷调节不透明度、尺寸、配色主题、图层与信息卡方位)">
                   <svg class="ui-icon"><use href="#i-sliders"/></svg>叠加调控
                 </button>
-                <button id="btnOverlayFullscreen" class="btn btn-secondary btn-sm" type="button" title="全屏沉浸微区分析模式 (快捷键 F)">
+                <button id="btnOverlayFullscreen" class="btn btn-secondary btn-sm" type="button" aria-pressed="false" title="全屏沉浸微区分析模式 (快捷键 F)">
                   <svg class="ui-icon"><use href="#i-fullscreen"/></svg>全屏
                 </button>
-                <span id="overlayImageStatus" class="overlay-status-badge">极坐标图优先呈现 · 待导入底图</span>
+                <span id="overlayImageStatus" class="overlay-status-badge" role="status" aria-live="polite">极坐标图优先呈现 · 待导入底图</span>
                 <button id="btnOverlayExportPng" class="btn btn-primary btn-sm" type="button" title="导出出版级 300DPI 4K 高分辨率融合图 (无损 PNG)">
                   <svg class="ui-icon"><use href="#i-download"/></svg>导出 4K 叠加图
                 </button>
@@ -854,44 +854,44 @@
             </div>
 
             <div class="overlay-canvas-wrapper">
-              <canvas id="overlayCanvas"></canvas>
+              <canvas id="overlayCanvas" tabindex="0" role="application" aria-label="样品叠加交互画布。方向键移动极坐标图，Shift 加方向键快速移动，加号或减号缩放，R 键复位，F 键切换全屏。"></canvas>
 
               <!-- 右侧浮层微调控制抽屉 (Quick HUD Drawer) -->
-              <div id="overlayQuickHud" class="overlay-quick-hud" style="display:none;">
+              <div id="overlayQuickHud" class="overlay-quick-hud" role="region" aria-label="极坐标叠加微调" aria-hidden="true" tabindex="-1" style="display:none;">
                 <div class="hud-header">
                   <span class="hud-title"><svg class="ui-icon"><use href="#i-sliders"/></svg>极坐标叠加微调 HUD</span>
-                  <button id="btnCloseOverlayHud" class="hud-close-btn" type="button" title="收起抽屉">×</button>
+                  <button id="btnCloseOverlayHud" class="hud-close-btn" type="button" aria-label="收起极坐标叠加微调面板" title="收起抽屉">×</button>
                 </div>
                 <div class="hud-body">
                   <!-- 1. 显微底图高对比适配色板 -->
                   <div class="hud-section">
                     <div class="hud-label"><svg class="ui-icon"><use href="#i-palette"/></svg>基底适配配色方案</div>
                     <div class="hud-theme-pills">
-                      <button class="hud-theme-pill active" data-theme="nature" title="自然紫色经典版">Nature</button>
-                      <button class="hud-theme-pill" data-theme="emerald" title="翡翠绿晶格增强">翡翠绿</button>
-                      <button class="hud-theme-pill" data-theme="science" title="青蓝高对比科研版">青蓝</button>
-                      <button class="hud-theme-pill" data-theme="amber" title="暗场金晶体版">琥珀金</button>
-                      <button class="hud-theme-pill" data-theme="prl" title="PRL 经典深红物理风">PRL</button>
-                      <button class="hud-theme-pill" data-theme="dark_lab" title="荧光暗室暗夜霓虹">暗室霓虹</button>
-                      <button class="hud-theme-pill" data-theme="high_contrast" title="极光高反差">高反差</button>
+                      <button class="hud-theme-pill active" data-theme="nature" aria-pressed="true" title="自然紫色经典版">Nature</button>
+                      <button class="hud-theme-pill" data-theme="emerald" aria-pressed="false" title="翡翠绿晶格增强">翡翠绿</button>
+                      <button class="hud-theme-pill" data-theme="science" aria-pressed="false" title="青蓝高对比科研版">青蓝</button>
+                      <button class="hud-theme-pill" data-theme="amber" aria-pressed="false" title="暗场金晶体版">琥珀金</button>
+                      <button class="hud-theme-pill" data-theme="prl" aria-pressed="false" title="PRL 经典深红物理风">PRL</button>
+                      <button class="hud-theme-pill" data-theme="dark_lab" aria-pressed="false" title="荧光暗室暗夜霓虹">暗室霓虹</button>
+                      <button class="hud-theme-pill" data-theme="high_contrast" aria-pressed="false" title="极光高反差">高反差</button>
                     </div>
                   </div>
 
                   <!-- 2. 几何与透明度快捷滑块 -->
                   <div class="hud-section">
                     <div class="hud-slider-row">
-                      <span class="hud-label">叠加不透明度</span>
+                      <span id="hudOpacityLabel" class="hud-label">叠加不透明度</span>
                       <span id="hudOpacityVal" class="hud-val">88%</span>
                     </div>
-                    <input type="range" id="hudOpacitySlider" class="range-slider" min="20" max="100" step="2" value="88">
+                    <input type="range" id="hudOpacitySlider" class="range-slider" min="20" max="100" step="2" value="88" aria-labelledby="hudOpacityLabel">
                   </div>
 
                   <div class="hud-section">
                     <div class="hud-slider-row">
-                      <span class="hud-label">极坐标相对尺寸</span>
+                      <span id="hudScaleLabel" class="hud-label">极坐标相对尺寸</span>
                       <span id="hudScaleVal" class="hud-val">38%</span>
                     </div>
-                    <input type="range" id="hudScaleSlider" class="range-slider" min="15" max="100" step="1" value="38">
+                    <input type="range" id="hudScaleSlider" class="range-slider" min="15" max="100" step="1" value="38" aria-labelledby="hudScaleLabel">
                   </div>
 
                   <!-- 3. 图层显隐快捷开关 -->
@@ -911,10 +911,10 @@
                   <div class="hud-section">
                     <div class="hud-label"><svg class="ui-icon"><use href="#i-dock"/></svg>信息卡停靠方位 (避免遮挡标尺)</div>
                     <div class="hud-dock-pills">
-                      <button class="hud-dock-btn" data-corner="top-left" title="停靠在左上方">↖ 左上</button>
-                      <button class="hud-dock-btn" data-corner="top-right" title="停靠在右上方">↗ 右上</button>
-                      <button class="hud-dock-btn" data-corner="bottom-left" title="停靠在左下方">↙ 左下</button>
-                      <button class="hud-dock-btn active" data-corner="bottom-right" title="停靠在右下方 (默认)">↘ 右下</button>
+                      <button class="hud-dock-btn" data-corner="top-left" aria-pressed="false" title="停靠在左上方">↖ 左上</button>
+                      <button class="hud-dock-btn" data-corner="top-right" aria-pressed="false" title="停靠在右上方">↗ 右上</button>
+                      <button class="hud-dock-btn" data-corner="bottom-left" aria-pressed="false" title="停靠在左下方">↙ 左下</button>
+                      <button class="hud-dock-btn active" data-corner="bottom-right" aria-pressed="true" title="停靠在右下方 (默认)">↘ 右下</button>
                     </div>
                   </div>
 
@@ -922,10 +922,10 @@
                   <div class="hud-section">
                     <div class="hud-label">显微照片快速预处理滤镜</div>
                     <div class="hud-theme-pills">
-                      <button id="btnHudFilterNormal" class="hud-theme-pill active">标准原图</button>
-                      <button id="btnHudFilterContrast" class="hud-theme-pill">微区高对比</button>
-                      <button id="btnHudFilterGray" class="hud-theme-pill">单色灰度</button>
-                      <button id="btnHudFilterInvert" class="hud-theme-pill">暗场反相</button>
+                      <button id="btnHudFilterNormal" class="hud-theme-pill active" aria-pressed="true">标准原图</button>
+                      <button id="btnHudFilterContrast" class="hud-theme-pill" aria-pressed="false">微区高对比</button>
+                      <button id="btnHudFilterGray" class="hud-theme-pill" aria-pressed="false">单色灰度</button>
+                      <button id="btnHudFilterInvert" class="hud-theme-pill" aria-pressed="false">暗场反相</button>
                     </div>
                   </div>
 
@@ -940,7 +940,7 @@
                 </div>
               </div>
 
-              <div id="overlayToast" class="overlay-toast" style="display:none;">
+              <div id="overlayToast" class="overlay-toast" role="status" aria-live="polite" style="display:none;">
                 <span id="overlayToastText">已切换到样品叠加视图</span>
               </div>
               <div id="overlayDragHint" class="overlay-drag-hint">

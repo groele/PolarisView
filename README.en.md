@@ -88,4 +88,4 @@ Pol.txt                        Optional measured example
 
 ## Version
 
-Current extension version: **v3.1.0**.
+Current extension version: **v3.1.5**.

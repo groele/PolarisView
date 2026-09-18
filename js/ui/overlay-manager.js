@@ -75,6 +75,11 @@ class PolarOverlayManager {
     this.onImageLoaded = null;
 
     this.initCanvasEvents();
+    const container = this.canvas?.parentElement;
+    if (container && typeof ResizeObserver !== 'undefined') {
+      this.resizeObserver = new ResizeObserver(() => this.resize());
+      this.resizeObserver.observe(container);
+    }
     // 核心重构：优先呈现极坐标图，严禁默认载入虚构底图，保持 this.image = null
     this.image = null;
     this.imageName = '';
@@ -139,7 +144,7 @@ class PolarOverlayManager {
     while (newRot < -180) newRot += 360;
     this.overlayConfig.rotation = newRot;
     if (this.onConfigChange) this.onConfigChange(this.overlayConfig);
-    this.render();
+    this.requestRender();
   }
 
   setRotation(angle) {
@@ -148,7 +153,7 @@ class PolarOverlayManager {
     while (newRot < -180) newRot += 360;
     this.overlayConfig.rotation = newRot;
     if (this.onConfigChange) this.onConfigChange(this.overlayConfig);
-    this.render();
+    this.requestRender();
   }
 
   setBadgeCorner(corner) {
@@ -209,6 +214,34 @@ class PolarOverlayManager {
     this.canvas.addEventListener('touchstart', (e) => this.handleTouchStart(e), { passive: false });
     this.canvas.addEventListener('touchmove', (e) => this.handleTouchMove(e), { passive: false });
     this.canvas.addEventListener('touchend', (e) => this.handleTouchEnd(e), { passive: false });
+    this.canvas.addEventListener('keydown', (e) => this.handleCanvasKeyDown(e));
+  }
+
+  handleCanvasKeyDown(e) {
+    const arrows = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
+    if (arrows.includes(e.key)) {
+      e.preventDefault();
+      const rect = this.canvas.getBoundingClientRect();
+      const scaleX = this.canvas.width / (rect.width || this.canvas.width || 1);
+      const scaleY = this.canvas.height / (rect.height || this.canvas.height || 1);
+      const step = e.shiftKey ? 10 : 1;
+      if (e.key === 'ArrowLeft') this.overlayConfig.offsetX -= Math.round(step * scaleX);
+      if (e.key === 'ArrowRight') this.overlayConfig.offsetX += Math.round(step * scaleX);
+      if (e.key === 'ArrowUp') this.overlayConfig.offsetY -= Math.round(step * scaleY);
+      if (e.key === 'ArrowDown') this.overlayConfig.offsetY += Math.round(step * scaleY);
+      if (this.onConfigChange) this.onConfigChange(this.overlayConfig);
+      this.requestRender();
+      return;
+    }
+
+    if (['+', '=', '-', '_'].includes(e.key)) {
+      e.preventDefault();
+      const direction = (e.key === '+' || e.key === '=') ? 1 : -1;
+      const nextScale = Math.max(0.1, Math.min(1.5, this.overlayConfig.scale + direction * 0.02));
+      this.overlayConfig.scale = parseFloat(nextScale.toFixed(3));
+      if (this.onConfigChange) this.onConfigChange(this.overlayConfig);
+      this.requestRender();
+    }
   }
 
   handleTouchStart(e) {
@@ -875,12 +908,19 @@ class PolarOverlayManager {
     // 仅在视口容器实际可见且具有正宽高时才设置物理像素与内联尺寸，防止在隐藏状态被默认值锁死
     if (width > 0 && height > 0) {
       const dpr = window.devicePixelRatio || 1;
-      this.canvas.width = Math.round(width * dpr);
-      this.canvas.height = Math.round(height * dpr);
+      const pixelWidth = Math.round(width * dpr);
+      const pixelHeight = Math.round(height * dpr);
+      const sizeChanged = this.canvas.width !== pixelWidth || this.canvas.height !== pixelHeight || this._renderDpr !== dpr;
+      if (!sizeChanged) return false;
+      this.canvas.width = pixelWidth;
+      this.canvas.height = pixelHeight;
       this.canvas.style.width = `${width}px`;
       this.canvas.style.height = `${height}px`;
-      this.render();
+      this._renderDpr = dpr;
+      this.requestRender();
+      return true;
     }
+    return false;
   }
 
   /**
@@ -889,6 +929,10 @@ class PolarOverlayManager {
    */
   requestRender() {
     if (this._renderRafId) return;
+    if (typeof requestAnimationFrame !== 'function') {
+      this.render();
+      return;
+    }
     this._renderRafId = requestAnimationFrame(() => {
       this._renderRafId = null;
       this.render();
@@ -897,7 +941,7 @@ class PolarOverlayManager {
 
   cancelPendingRender() {
     if (this._renderRafId) {
-      cancelAnimationFrame(this._renderRafId);
+      if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(this._renderRafId);
       this._renderRafId = null;
     }
   }
