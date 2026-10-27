@@ -30,9 +30,9 @@ class TableGrid {
           <span id="gridRowCount" class="badge badge-success">0 行</span>
         </div>
         <div style="display:flex;gap:0.3rem;">
-          <button id="btnGridAddRow" class="btn btn-secondary btn-sm" title="在末尾新增一行">+ 增行</button>
-          <button id="btnGridNormalize" class="btn btn-secondary btn-sm" title="一键将光强归一化到 [0, 1]"><svg class="table-action-icon"><use href="#i-modulation"/></svg>归一化</button>
-          <button id="btnGridClear" class="btn btn-secondary btn-sm" title="清空全部数据">清空</button>
+          <button id="btnGridAddRow" type="button" class="btn btn-secondary btn-sm" title="在末尾新增一行">+ 增行</button>
+          <button id="btnGridNormalize" type="button" class="btn btn-secondary btn-sm" title="一键将光强归一化到 [0, 1]"><svg class="table-action-icon"><use href="#i-modulation"/></svg>归一化</button>
+          <button id="btnGridClear" type="button" class="btn btn-secondary btn-sm" title="清空全部数据">清空</button>
         </div>
       </div>
       <div class="grid-table-wrapper">
@@ -78,10 +78,15 @@ class TableGrid {
 
   renderRows() {
     if (!this.tbody) return;
+    const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
+    const shouldRestoreFocus = activeEl && this.tbody.contains(activeEl) && activeEl.classList?.contains('grid-cell-input');
+    const focusedIdx = shouldRestoreFocus ? activeEl.dataset.idx : null;
+    const focusedField = shouldRestoreFocus ? activeEl.dataset.field : null;
+
     this.tbody.innerHTML = '';
     this.rowCountEl.textContent = `${this.points.length} 行`;
 
-    const mult = Number.isFinite(this.options.angleMultiplier) ? this.options.angleMultiplier : 10;
+    const mult = Number.isFinite(this.options.angleMultiplier) && this.options.angleMultiplier > 0 ? this.options.angleMultiplier : 10;
 
     this.points.forEach((p, idx) => {
       const tr = document.createElement('tr');
@@ -95,23 +100,30 @@ class TableGrid {
       tr.innerHTML = `
         <td style="color:var(--text-light);">${idx + 1}</td>
         <td>
-          <input type="number" class="grid-cell-input" data-field="rawX" data-idx="${idx}" value="${p.rawX}">
+          <input type="number" class="grid-cell-input" aria-label="第 ${idx + 1} 行 X 坐标" data-field="rawX" data-idx="${idx}" value="${p.rawX}">
         </td>
         <td style="color:var(--text-muted);">${angleVal}°</td>
         <td>
-          <input type="number" class="grid-cell-input" data-field="y" data-idx="${idx}" value="${p.y}">
+          <input type="number" class="grid-cell-input" aria-label="第 ${idx + 1} 行 原始光强 Y" data-field="y" data-idx="${idx}" value="${p.y}">
           ${isOutlier ? '<svg class="table-warning-icon" title="马吕斯拟合异常离群点 (>2.5σ)"><use href="#i-warning"/></svg>' : ''}
         </td>
         <td style="color:var(--text-muted);">${baseVal}</td>
         <td style="color:#10b981;font-weight:600;">${subVal}</td>
         <td>
-          <button class="btn btn-sm" data-action="del" data-idx="${idx}" style="padding:0 4px;color:#ef4444;background:none;border:none;cursor:pointer;">✕</button>
+          <button type="button" class="btn btn-sm" aria-label="删除第 ${idx + 1} 行" data-action="del" data-idx="${idx}" style="padding:0 4px;color:#ef4444;background:none;border:none;cursor:pointer;">✕</button>
         </td>
       `;
       this.tbody.appendChild(tr);
     });
 
     this.bindRowInputs();
+
+    if (focusedIdx !== null && focusedField) {
+      const targetInput = this.tbody.querySelector(`.grid-cell-input[data-idx="${focusedIdx}"][data-field="${focusedField}"]`);
+      if (targetInput && typeof targetInput.focus === 'function') {
+        targetInput.focus({ preventScroll: true });
+      }
+    }
   }
 
   bindRowInputs() {
@@ -182,11 +194,11 @@ class TableGrid {
     if (!text || !text.includes('\n')) return;
 
     e.preventDefault();
-    const newPoints = DataParser.parseRawData(text, this.options.angleMultiplier);
-    if (newPoints.length > 0) {
-      this.points = newPoints;
+    const parsed = DataParser.parseRawDataDetailed(text, this.options.angleMultiplier);
+    if (parsed.points.length > 0) {
+      this.points = parsed.points;
       this.renderRows();
-      this.options.onChange(this.points);
+      this.options.onChange(this.points, parsed.diagnostics);
     }
   }
 }

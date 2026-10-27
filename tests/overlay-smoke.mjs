@@ -4,7 +4,21 @@ import { readFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 
-const candidate = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const candidates = process.platform === 'win32'
+  ? [
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+      'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+      path.join(process.env.LOCALAPPDATA || '', 'Google', 'Chrome', 'Application', 'chrome.exe')
+    ]
+  : ['/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'];
+
+let candidate = '';
+for (const c of candidates) {
+  try { await readFile(c); candidate = c; break; } catch {}
+}
+if (!candidate) throw new Error('Chrome/Chromium executable not found.');
 const sample = await readFile('Pol.txt', 'utf8');
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.txt': 'text/plain' };
 

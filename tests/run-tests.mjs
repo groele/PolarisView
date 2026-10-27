@@ -222,7 +222,9 @@ const mockCtx = {
   clearRect() {},
   drawImage() {},
   scale() {},
+  rotate() {},
   translate() {},
+  createLinearGradient() { return { addColorStop() {} }; },
   filter: 'none',
   imageSmoothingEnabled: false,
   imageSmoothingQuality: 'low'
@@ -236,6 +238,103 @@ mockOverlay.drawBackgroundImage(mockCtx, 800, 600);
 assert.equal(mockCtx.filter, 'none', 'ctx.filter must be explicitly reset to none after drawBackgroundImage');
 assert.equal(mockCtx.imageSmoothingEnabled, true, 'imageSmoothingEnabled must be set to true');
 assert.equal(mockCtx.imageSmoothingQuality, 'high', 'imageSmoothingQuality must be high');
+
+// 验证 Savitzky-Golay 11 点窗口平滑与 5 点窗口不同
+await load('js/algorithms/filter-engine.js', 'FilterEngine', 'FilterEngineTest');
+await load('js/core/state-store.js', 'StateStore', 'StateStoreTest');
+const noisySignal = [100, 140, 95, 160, 110, 180, 120, 190, 105, 150, 115, 175];
+const sg5 = FilterEngineTest.savitzkyGolay(noisySignal, 5);
+const sg11 = FilterEngineTest.savitzkyGolay(noisySignal, 11);
+assert.equal(sg11.length, noisySignal.length);
+assert.notDeepEqual(sg11, sg5, '11-point Savitzky-Golay filter must use 11-point coefficients rather than falling back to 5-point');
+
+// 验证 MalusFitter 暴露 0.1° 精度的 thetaMax 与 thetaMin
+assert.equal(typeof fit.params.thetaMax, 'number');
+assert.equal(typeof fit.params.thetaMin, 'number');
+assert.ok(fit.params.fitMaxIntensity > fit.params.fitMinIntensity);
+
+// 验证 StateStore.saveLatestMetrics 正确读取 summary.extinctionRatioDB
+const stats = DataParserTest.computeStatistics(repeats);
+let savedPayload = null;
+globalThis.chrome = {
+  storage: {
+    local: {
+      get(keys, cb) { if (cb) cb({}); },
+      set(obj, cb) { savedPayload = obj; if (cb) cb(); }
+    }
+  }
+};
+const store = new StateStoreTest();
+store.saveLatestMetrics(stats.summary, fit);
+assert.equal(savedPayload.latestMetrics.extinctionDB, stats.summary.extinctionRatioDB, 'StateStore must read summary.extinctionRatioDB');
+
+// 验证导出 4K 叠加图时 render() 保持 _exportScale (3x) 缩放矩阵，不被重置为 1x
+const realRenderOverlay = Object.create(PolarOverlayManagerTest.prototype);
+realRenderOverlay.overlayConfig = {
+  offsetX: 0, offsetY: 0, scale: 0.56, rotation: 0, opacity: 0.9,
+  renderMode: 'all', bgStyle: 'frosted', showGrid: true, showFastAxis: true,
+  showLabels: true, showBadge: true, showReticle: true, dynamicRange: true,
+  theme: 'nature', badgeCorner: 'bottom-right'
+};
+realRenderOverlay.imageFilters = { brightness: 100, contrast: 100, grayscale: false, invert: false, flipX: false, flipY: false };
+realRenderOverlay.image = null;
+realRenderOverlay.polarData = null;
+let currentScaleX = 1;
+let drawScaleX = null;
+const scaleTestCtx = {
+  save() {},
+  restore() {},
+  setTransform(a) { currentScaleX = a; },
+  clearRect() { drawScaleX = currentScaleX; },
+  fillRect() {},
+  beginPath() {},
+  arc() {},
+  arcTo() {},
+  fill() {},
+  stroke() {},
+  moveTo() {},
+  lineTo() {},
+  closePath() {},
+  setLineDash() {},
+  fillText() {},
+  strokeText() {},
+  measureText(t) { return { width: String(t).length * 7 }; },
+  createRadialGradient() { return { addColorStop() {} }; },
+  roundRect() {},
+  drawImage() {},
+  scale() {},
+  rotate() {},
+  translate() {},
+  createLinearGradient() { return { addColorStop() {} }; },
+  filter: 'none'
+};
+realRenderOverlay.ctx = scaleTestCtx;
+realRenderOverlay.canvas = {
+  width: 2400,
+  height: 1800,
+  getBoundingClientRect: () => ({ width: 800, height: 600 })
+};
+realRenderOverlay._exportScale = 3;
+realRenderOverlay.render();
+assert.equal(drawScaleX, 3, 'render() must apply _exportScale in ctx.setTransform during high-res export drawing');
+realRenderOverlay._exportScale = 1;
+
+// 验证质量门 blocked 状态下 isReportable() 为 false，且 getDataExtrema 优先使用 activeGroups
+realRenderOverlay.setData({
+  groups: [
+    { name: 'G1', groupIndex: 0, points: [{ relAngle: 10, y: 500 }] },
+    { name: 'G2', groupIndex: 1, points: [{ relAngle: 20, y: 9999 }] }
+  ],
+  activeGroups: [
+    { name: 'G1', groupIndex: 0, points: [{ relAngle: 10, y: 500 }] }
+  ],
+  stats,
+  fitResult: fit,
+  qualityAudit: { claimLevel: 'blocked' }
+});
+assert.equal(realRenderOverlay.isReportable(), false, 'Overlay must gate derived claims when qualityAudit.claimLevel is blocked');
+const extrema = realRenderOverlay.getDataExtrema();
+assert.equal(extrema.maxVal, 500, 'getDataExtrema must respect activeGroups and exclude hidden G2');
 
 console.log('PASS scientific integrity, parser diagnostics, independent repeats, stable fit, safe defaults, XLSX structure, sample optical overlay preset linkage, and high-contrast HUD enhancements');
 

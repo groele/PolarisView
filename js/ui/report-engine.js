@@ -26,7 +26,8 @@ class ReportEngine {
         height: 600
       });
 
-      const { groups, activeGroups, stats, fitResult } = appState;
+      const { groups, activeGroups, stats, fitResult, qualityAudit } = appState;
+      const reportable = qualityAudit?.claimLevel !== 'blocked';
       const reportGroups = Array.isArray(activeGroups) && activeGroups.length ? activeGroups : groups;
       const { stepStats } = stats;
 
@@ -45,51 +46,54 @@ class ReportEngine {
       const rMin = Math.max(0, Math.floor(minVal - margin));
       const rMax = Math.ceil(maxVal + margin);
 
+      const filterCfg = appState.config?.filterConfig || { type: appState.config?.filterType || 'gaussian', sigma: 1.2, windowSize: 5 };
       const rawMeanList = stepStats.map(s => s.mean);
-      const smoothedList = FilterEngine.applyFilter(rawMeanList, 'gaussian', { sigma: 1.2 });
+      const smoothedList = FilterEngine.applyFilter(rawMeanList, filterCfg.type, filterCfg);
 
       const polarSeries = [];
       const legendData = [];
 
-      // 1. 误差带
-      const upperData = [];
-      const lowerData = [];
-      stepStats.forEach(s => {
-        upperData.push([s.mean + s.sd, s.relAngle]);
-        lowerData.push([Math.max(0, s.mean - s.sd), s.relAngle]);
-      });
-      if (upperData.length > 0) {
-        upperData.push([upperData[0][0], 360]);
-        lowerData.push([lowerData[0][0], 360]);
+      // 1. 误差带 (仅在可报告时显示)
+      if (reportable) {
+        const upperData = [];
+        const lowerData = [];
+        stepStats.forEach(s => {
+          upperData.push([s.mean + s.sd, s.relAngle]);
+          lowerData.push([Math.max(0, s.mean - s.sd), s.relAngle]);
+        });
+        if (upperData.length > 0) {
+          upperData.push([upperData[0][0], 360]);
+          lowerData.push([lowerData[0][0], 360]);
+        }
+
+        polarSeries.push({
+          name: '均值下界',
+          type: 'line',
+          coordinateSystem: 'polar',
+          smooth: 0.3,
+          showSymbol: false,
+          lineStyle: { opacity: 0 },
+          data: lowerData,
+          stack: 'rep-err',
+          silent: true,
+          z: 1
+        });
+
+        polarSeries.push({
+          name: '标准差误差带 (±1σ)',
+          type: 'line',
+          coordinateSystem: 'polar',
+          smooth: 0.3,
+          showSymbol: false,
+          lineStyle: { opacity: 0 },
+          areaStyle: { color: palette.errArea },
+          data: upperData.map((pt, i) => [pt[0] - lowerData[i][0], pt[1]]),
+          stack: 'rep-err',
+          silent: true,
+          z: 2
+        });
+        legendData.push('标准差误差带 (±1σ)');
       }
-
-      polarSeries.push({
-        name: '均值下界',
-        type: 'line',
-        coordinateSystem: 'polar',
-        smooth: 0.3,
-        showSymbol: false,
-        lineStyle: { opacity: 0 },
-        data: lowerData,
-        stack: 'rep-err',
-        silent: true,
-        z: 1
-      });
-
-      polarSeries.push({
-        name: '标准差误差带 (±1σ)',
-        type: 'line',
-        coordinateSystem: 'polar',
-        smooth: 0.3,
-        showSymbol: false,
-        lineStyle: { opacity: 0 },
-        areaStyle: { color: palette.errArea },
-        data: upperData.map((pt, i) => [pt[0] - lowerData[i][0], pt[1]]),
-        stack: 'rep-err',
-        silent: true,
-        z: 2
-      });
-      legendData.push('标准差误差带 (±1σ)');
 
       // 2. 三组曲线
       reportGroups.forEach((g, gIdx) => {
@@ -112,52 +116,56 @@ class ReportEngine {
       });
 
       // 3. 均值
-      legendData.push('均值 (Mean)');
-      const meanPts = stepStats.map(s => [s.mean, s.relAngle]);
-      if (meanPts.length > 0) meanPts.push([meanPts[0][0], 360]);
-      polarSeries.push({
-        name: '均值 (Mean)',
-        type: 'line',
-        coordinateSystem: 'polar',
-        symbol: 'diamond',
-        symbolSize: 7,
-        showSymbol: true,
-        itemStyle: { color: palette.mean },
-        lineStyle: { width: 2.5 },
-        data: meanPts,
-        z: 5
-      });
-
-      // 4. 平滑拟合曲线 (360 点样条)
-      const ptsForSpline = stepStats.map((s, i) => ({ angle: s.relAngle, y: smoothedList[i] }));
-      const denseSpline = FilterEngine.periodicSplineInterpolate(ptsForSpline, 360);
-      legendData.push('高斯平滑曲线');
-      polarSeries.push({
-        name: '高斯平滑曲线',
-        type: 'line',
-        coordinateSystem: 'polar',
-        smooth: true,
-        showSymbol: false,
-        itemStyle: { color: palette.smooth },
-        lineStyle: { width: 2.8 },
-        data: denseSpline.map(d => [d[1], d[0]]),
-        z: 6
-      });
-
-      // 5. 马吕斯理论拟合
-      if (fitResult && fitResult.denseFitCurve) {
-        legendData.push('马吕斯理论拟合 (Malus Fit)');
+      if (reportable) {
+        legendData.push('均值 (Mean)');
+        const meanPts = stepStats.map(s => [s.mean, s.relAngle]);
+        if (meanPts.length > 0) meanPts.push([meanPts[0][0], 360]);
         polarSeries.push({
-          name: '马吕斯理论拟合 (Malus Fit)',
+          name: '均值 (Mean)',
           type: 'line',
           coordinateSystem: 'polar',
-          smooth: true,
-          showSymbol: false,
-          itemStyle: { color: palette.fit },
-          lineStyle: { width: 2.2, type: 'dotted' },
-          data: fitResult.denseFitCurve.map(pt => [pt[1], pt[0]]),
-          z: 7
+          symbol: 'diamond',
+          symbolSize: 7,
+          showSymbol: true,
+          itemStyle: { color: palette.mean },
+          lineStyle: { width: 2.5 },
+          data: meanPts,
+          z: 5
         });
+
+        // 4. 平滑拟合曲线 (360 点样条)
+        if (filterCfg.type !== 'none') {
+          const ptsForSpline = stepStats.map((s, i) => ({ angle: s.relAngle, y: smoothedList[i] }));
+          const denseSpline = FilterEngine.periodicSplineInterpolate(ptsForSpline, 360);
+          legendData.push('滤波平滑曲线');
+          polarSeries.push({
+            name: '滤波平滑曲线',
+            type: 'line',
+            coordinateSystem: 'polar',
+            smooth: true,
+            showSymbol: false,
+            itemStyle: { color: palette.smooth },
+            lineStyle: { width: 2.8 },
+            data: denseSpline.map(d => [d[1], d[0]]),
+            z: 6
+          });
+        }
+
+        // 5. 马吕斯理论拟合
+        if (fitResult && fitResult.denseFitCurve) {
+          legendData.push('马吕斯理论拟合 (Malus Fit)');
+          polarSeries.push({
+            name: '马吕斯理论拟合 (Malus Fit)',
+            type: 'line',
+            coordinateSystem: 'polar',
+            smooth: true,
+            showSymbol: false,
+            itemStyle: { color: palette.fit },
+            lineStyle: { width: 2.2, type: 'dotted' },
+            data: fitResult.denseFitCurve.map(pt => [pt[1], pt[0]]),
+            z: 7
+          });
+        }
       }
 
       const option = {
@@ -244,7 +252,8 @@ class ReportEngine {
         height: 420
       });
 
-      const { groups, activeGroups, stats, fitResult } = appState;
+      const { groups, activeGroups, stats, fitResult, qualityAudit } = appState;
+      const reportable = qualityAudit?.claimLevel !== 'blocked';
       const reportGroups = Array.isArray(activeGroups) && activeGroups.length ? activeGroups : groups;
       const { stepStats } = stats;
 
@@ -266,33 +275,35 @@ class ReportEngine {
         });
       });
 
-      legendList.push('均值 (Mean)');
-      series.push({
-        name: '均值 (Mean)',
-        type: 'line',
-        data: stepStats.map(s => s.mean),
-        symbol: 'diamond',
-        symbolSize: 6,
-        lineStyle: { width: 2.5 },
-        itemStyle: { color: palette.mean }
-      });
-
-      if (fitResult) {
-        legendList.push('马吕斯拟合');
-        const fitLine = stepStats.map(st => {
-          const rad = (st.relAngle * Math.PI) / 180;
-          const c = fitResult.params.coeffs;
-          return Number((c.A0 + c.A4 * Math.cos(4 * rad) + c.B4 * Math.sin(4 * rad) + c.A2 * Math.cos(2 * rad) + c.B2 * Math.sin(2 * rad)).toFixed(2));
-        });
+      if (reportable) {
+        legendList.push('均值 (Mean)');
         series.push({
-          name: '马吕斯拟合',
+          name: '均值 (Mean)',
           type: 'line',
-          data: fitLine,
-          smooth: true,
-          symbol: 'none',
-          lineStyle: { width: 2.2, type: 'dotted' },
-          itemStyle: { color: palette.fit }
+          data: stepStats.map(s => s.mean),
+          symbol: 'diamond',
+          symbolSize: 6,
+          lineStyle: { width: 2.5 },
+          itemStyle: { color: palette.mean }
         });
+
+        if (fitResult) {
+          legendList.push('马吕斯拟合');
+          const fitLine = stepStats.map(st => {
+            const rad = (st.relAngle * Math.PI) / 180;
+            const c = fitResult.params.coeffs;
+            return Number((c.A0 + c.A4 * Math.cos(4 * rad) + c.B4 * Math.sin(4 * rad) + c.A2 * Math.cos(2 * rad) + c.B2 * Math.sin(2 * rad)).toFixed(2));
+          });
+          series.push({
+            name: '马吕斯拟合',
+            type: 'line',
+            data: fitLine,
+            smooth: true,
+            symbol: 'none',
+            lineStyle: { width: 2.2, type: 'dotted' },
+            itemStyle: { color: palette.fit }
+          });
+        }
       }
 
       const option = {
@@ -378,10 +389,10 @@ class ReportEngine {
           <td>${st.values[0] !== undefined ? st.values[0] : '-'}</td>
           <td>${st.values[1] !== undefined ? st.values[1] : '-'}</td>
           <td>${st.values[2] !== undefined ? st.values[2] : '-'}</td>
-          <td style="font-weight:bold;color:#b91c1c;">${st.mean}</td>
-          <td>±${st.sd}</td>
-          <td>${st.se === null ? 'N/A' : `±${st.se}`}</td>
-          <td>${st.rsd}%</td>
+          <td style="font-weight:bold;color:#b91c1c;">${reportable ? st.mean : '不可报告'}</td>
+          <td>${reportable ? `±${st.sd}` : '不可报告'}</td>
+          <td>${!reportable ? '不可报告' : (st.se === null ? 'N/A' : `±${st.se}`)}</td>
+          <td>${reportable ? `${st.rsd}%` : '不可报告'}</td>
         </tr>
       `;
     });
@@ -544,17 +555,17 @@ class ReportEngine {
     </tr>
     <tr>
       <th>最大净光强 (峰值)</th>
-      <td>${summary.maxIntensity} Counts (${summary.maxAngle}°)</td>
+      <td>${reportable ? `${summary.maxIntensity} Counts (${summary.maxAngle}°)` : '不可报告'}</td>
       <th>最小净光强 (谷值)</th>
-      <td>${summary.minIntensity} Counts (${summary.minAngle}°)</td>
+      <td>${reportable ? `${summary.minIntensity} Counts (${summary.minAngle}°)` : '不可报告'}</td>
     </tr>
   </table>
 
   <div class="section-title">2. 经验谐波拟合与稳定性诊断</div>
   <table class="metrics-table">
     <tr>
-      <th>快轴初始偏角 θ₀</th>
-      <td><b style="color:#059669;font-size:15px;">${metric(p.theta0, '°')}</b></td>
+      <th>快轴初始偏角 θ₀ / 峰值偏角 θmax</th>
+      <td><b style="color:#059669;font-size:15px;">${metric(p.theta0, '°')}</b>${reportable && p.thetaMax !== undefined ? ` / <b>${p.thetaMax}°</b>` : ''}</td>
       <th>拟合优度 (R²)</th>
       <td><b style="color:#2563eb;font-size:15px;">${metric(p.rSquaredPercent, '%')}</b></td>
     </tr>

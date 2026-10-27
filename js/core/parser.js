@@ -104,7 +104,7 @@ class DataParser {
         const rawAngle = p.angle;
         let relAngle = rawAngle - startAngle;
         relAngle = ((relAngle % 360) + 360) % 360;
-        if (idx === pointsInGroup.length - 1 && relAngle === 0 && pointsInGroup.length > 1) {
+        if (idx === pointsInGroup.length - 1 && (Math.abs(relAngle) < 1e-9 || Math.abs(relAngle - 360) < 1e-9) && pointsInGroup.length > 1) {
           relAngle = 360;
         }
         return {
@@ -194,11 +194,12 @@ class DataParser {
 
     valid.forEach(p => {
       const delta = p.angle - minAngle;
+      if (delta > fullCycles * periodDeg + 1e-9) return;
       let groupIndex = Math.floor(delta / periodDeg);
       if (groupIndex >= fullCycles) groupIndex = fullCycles - 1;
       if (groupIndex < 0) groupIndex = 0;
       let relAngle = ((delta % periodDeg) + periodDeg) % periodDeg;
-      if (p.angle === maxAngle && delta > 0 && Math.abs(relAngle) < 1e-9) relAngle = periodDeg;
+      if ((p.angle === maxAngle || Math.abs(delta - (groupIndex + 1) * periodDeg) < 1e-9) && delta > 0 && Math.abs(relAngle) < 1e-9) relAngle = periodDeg;
       groups[groupIndex].points.push({
         rawX: p.rawX,
         sourceIndex: p.sourceIndex,

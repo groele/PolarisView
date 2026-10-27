@@ -1,5 +1,23 @@
 # Changelog
 
+## v3.1.6 - 2026-10-27
+
+### Fixed
+- **4K 叠加图像导出缩放矩阵修复 (`PolarOverlayManager.exportOverlayImage`)**:
+  - 修复了高分辨率导出时 `render()` 内部 `ctx.setTransform(1, 0, 0, 1, 0, 0)` 抹除 `3×` 导出倍率导致导出图像仅左上角 1/9 区域绘制的缺陷。
+- **真正矢量 SVG 导出 (`PolarChartManager.exportImage` / `exportDualStitchedImage`)**:
+  - 新增 `renderChartToSvgDataUrl` 离屏 `{ renderer: 'svg' }` 矢量渲染与双联视图 SVG 拼接，修复此前在 Canvas 渲染器下导出 `.svg` 实为 PNG 位图的问题。
+- **全链路质量门控 (`claimLevel === 'blocked'`) 与可见组 (`activeGroups`) 一致性**:
+  - 在样品叠加视图 (`PolarOverlayManager`)、综合单图 (`renderUnifiedComboChart`)、学术实验报告 (`ReportEngine`) 以及界面统计明细表 (`updateDataTable`) 中统一拦截 `blocked` 状态下的不可报告衍生指标与拟合曲线。
+  - 在叠加视图散点绘制与极值计算中同步响应图例组显隐筛选 (`activeGroups`)，并在直角坐标与综合单图中补齐 `#groupFilter` 筛选支持。
+- **信号处理与拟合精度加固**:
+  - 补齐 `FilterEngine.savitzkyGolay` 的 11 点窗口二次/三次多项式卷积系数 (`win = 11`)。
+  - 在 `MalusFitter.fitMalusLaw` 中同时提供 `0.1°` 步长精化的 `thetaMax` 与 `thetaMin`，统一 ECharts 图表极值标注与叠加视图快轴角标数值。
+  - 修复 `StateStore.saveLatestMetrics` 中 `extinctionRatioDB` 字段读取、`DataParser` 周期分组浮点容差及 `TableGrid` 编辑重绘焦点保持。
+- **HTML 精灵图与自动化测试强化**:
+  - 补齐 `index.html` 中缺失的 `#i-download` SVG 图标定义，并在 `tests/check-html.mjs` 中新增所有内部 `#id` 引用完整性校验。
+  - 在 `tests/overlay-smoke.mjs` 中支持跨平台浏览器探测并加入 GitHub Actions CI 工作流。
+
 ## v3.1.5 - 2026-09-18
 
 ### Changed

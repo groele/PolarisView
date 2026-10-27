@@ -531,7 +531,7 @@ class BaselineEngine {
       }
     } catch (err) {
       console.warn('基线算法运算异常，自动安全降级为常数底噪模式:', err);
-      return this.constantBaseline(yValues, 'min', 0, clampZero);
+      return { ...this.constantBaseline(yValues, 'min', 0, clampZero), hasSubtracted: true };
     }
 
     return {

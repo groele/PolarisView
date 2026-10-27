@@ -71,6 +71,9 @@ class FilterEngine {
     } else if (win === 9) {
       coeffs = [-21, 14, 39, 54, 59, 54, 39, 14, -21];
       norm = 231;
+    } else if (win >= 11) {
+      coeffs = [-36, 9, 44, 69, 84, 89, 84, 69, 44, 9, -36];
+      norm = 429;
     }
 
     const half = Math.floor(coeffs.length / 2);

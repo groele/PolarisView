@@ -46,10 +46,10 @@ class PolarizationApp {
       // 2. 初始化表格式交互编辑组件
       this.tableGrid = new TableGrid('tableInputContainer', {
         angleMultiplier: 10,
-        onChange: (updatedPoints) => {
+        onChange: (updatedPoints, diagnostics = null) => {
           if (!this.isSyncing) {
             this.currentRawPoints = Array.isArray(updatedPoints) ? [...updatedPoints] : [];
-            this.parserDiagnostics = {
+            this.parserDiagnostics = diagnostics || {
               totalLines: this.currentRawPoints.length,
               acceptedLines: this.currentRawPoints.length,
               rejectedLines: 0,
@@ -180,8 +180,9 @@ class PolarizationApp {
     if (angleMultiplier) {
       angleMultiplier.addEventListener('input', (e) => {
         const mult = parseFloat(e.target.value);
-        this.tableGrid.setAngleMultiplier(mult);
-        this.currentRawPoints.forEach(p => p.angle = p.rawX * mult);
+        const validMult = Number.isFinite(mult) && mult > 0 ? mult : NaN;
+        this.tableGrid.setAngleMultiplier(validMult);
+        this.currentRawPoints.forEach(p => { p.angle = p.rawX * validMult; });
         this.processAndRender();
       });
     }
@@ -408,12 +409,17 @@ class PolarizationApp {
       themeToggle.addEventListener('click', () => {
         const isDark = document.body.getAttribute('data-theme') === 'dark';
         const newTheme = isDark ? 'light' : 'dark';
+        const targetJournalTheme = newTheme === 'dark' ? 'dark_lab' : 'nature';
         document.body.setAttribute('data-theme', newTheme);
         themeToggle.innerHTML = newTheme === 'dark'
           ? '<svg class="ui-icon" aria-hidden="true"><use href="#i-sun"/></svg>亮色模式'
           : '<svg class="ui-icon" aria-hidden="true"><use href="#i-moon"/></svg>暗色模式';
-        this.chartManager.setJournalTheme(newTheme === 'dark' ? 'dark_lab' : 'nature');
-        if (this.overlayManager) this.overlayManager.setTheme(newTheme === 'dark' ? 'dark_lab' : 'nature');
+        const journalSel = document.getElementById('journalTheme');
+        if (journalSel && [...journalSel.options].some(o => o.value === targetJournalTheme)) {
+          journalSel.value = targetJournalTheme;
+        }
+        this.chartManager.setJournalTheme(targetJournalTheme);
+        if (this.overlayManager) this.overlayManager.setTheme(targetJournalTheme);
       });
     }
 
@@ -448,7 +454,8 @@ class PolarizationApp {
           ...this.parsedState,
           config: {
             bgAlgo: document.getElementById('baselineAlgo').value,
-            filterType: document.getElementById('filterType').value
+            filterType: document.getElementById('filterType').value,
+            filterConfig: this.chartManager ? { ...this.chartManager.filterConfig } : undefined
           }
         };
         ReportEngine.generateAndOpenReport(appState);
@@ -540,6 +547,12 @@ class PolarizationApp {
     const step1FileInput = document.getElementById('step1OptFileInput');
     if (step1UploadZone && step1FileInput) {
       step1UploadZone.addEventListener('click', () => step1FileInput.click());
+      step1UploadZone.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          step1FileInput.click();
+        }
+      });
       step1UploadZone.addEventListener('dragover', (e) => {
         e.preventDefault();
         step1UploadZone.classList.add('dragover');
@@ -819,6 +832,7 @@ class PolarizationApp {
         pill.setAttribute('aria-pressed', 'true');
         const t = pill.dataset.theme;
         this.overlayManager?.setTheme(t);
+        this.chartManager?.setJournalTheme(t);
         const journalSel = document.getElementById('journalTheme');
         if (journalSel && [...journalSel.options].some(o => o.value === t)) {
           journalSel.value = t;
@@ -1183,12 +1197,16 @@ class PolarizationApp {
     }
     if (cfg.theme) {
       document.querySelectorAll('.hud-theme-pill[data-theme]').forEach(p => {
-        p.classList.toggle('active', p.dataset.theme === cfg.theme);
+        const isActive = p.dataset.theme === cfg.theme;
+        p.classList.toggle('active', isActive);
+        p.setAttribute('aria-pressed', isActive ? 'true' : 'false');
       });
     }
     if (cfg.badgeCorner) {
       document.querySelectorAll('.hud-dock-btn[data-corner]').forEach(b => {
-        b.classList.toggle('active', b.dataset.corner === cfg.badgeCorner);
+        const isActive = b.dataset.corner === cfg.badgeCorner;
+        b.classList.toggle('active', isActive);
+        b.setAttribute('aria-pressed', isActive ? 'true' : 'false');
       });
     }
   }
@@ -1589,7 +1607,8 @@ class PolarizationApp {
 
       // 5. 保存遥测指标至插件 Storage
       if (stats && stats.summary) {
-        if (qualityAudit.claimLevel === 'blocked') {
+        const reportable = qualityAudit.claimLevel !== 'blocked';
+        if (!reportable) {
           this.store.saveLatestMetrics(null, null);
           ExtensionBridge.notifyStateUpdate(null, null);
           this.setBlockedDerivedDisplays();
@@ -1598,7 +1617,7 @@ class PolarizationApp {
           ExtensionBridge.notifyStateUpdate(stats.summary, fitResult);
           this.updateStatsCards(stats.summary, fitResult, baselineResult);
         }
-        this.updateDataTable(stats.stepStats);
+        this.updateDataTable(stats.stepStats, reportable);
       }
 
       // 6. 渲染图表
@@ -1692,9 +1711,9 @@ class PolarizationApp {
 
   getAppVersion() {
     try {
-      return typeof chrome !== 'undefined' && chrome.runtime?.getManifest ? chrome.runtime.getManifest().version : '3.1.5';
+      return typeof chrome !== 'undefined' && chrome.runtime?.getManifest ? chrome.runtime.getManifest().version : '3.1.6';
     } catch (e) {
-      return '3.1.5';
+      return '3.1.6';
     }
   }
 
@@ -1824,7 +1843,7 @@ class PolarizationApp {
     }
   }
 
-  updateDataTable(stepStats) {
+  updateDataTable(stepStats, reportable = true) {
     const tbody = document.getElementById('dataTableBody');
     if (!tbody || !Array.isArray(stepStats)) return;
 
@@ -1837,10 +1856,10 @@ class PolarizationApp {
         <td>${gVals[0] !== undefined ? gVals[0] : '-'}</td>
         <td>${gVals[1] !== undefined ? gVals[1] : '-'}</td>
         <td>${gVals[2] !== undefined ? gVals[2] : '-'}</td>
-        <td style="color:#ef4444;font-weight:600;">${st.mean}</td>
-        <td>±${st.sd}</td>
-        <td>${st.se === null ? 'N/A' : `±${st.se}`}</td>
-        <td>${st.rsd}%</td>
+        <td style="color:#ef4444;font-weight:600;">${reportable ? st.mean : '不可报告'}</td>
+        <td>${reportable ? `±${st.sd}` : '不可报告'}</td>
+        <td>${!reportable ? '不可报告' : (st.se === null ? 'N/A' : `±${st.se}`)}</td>
+        <td>${reportable ? `${st.rsd}%` : '不可报告'}</td>
       `;
       tbody.appendChild(tr);
     });
@@ -1867,7 +1886,7 @@ class PolarizationApp {
     csv += `# 结论状态: ${audit.claimLevel || 'unknown'}; 警示: ${(audit.issues || []).map(x => x.text).join(' | ') || 'none'}\n`;
     csv += `# 调制度代理（条件性 DoLP）: ${reportable && summary.dolpEmpiricalPercent !== undefined ? (p.dolpPercent ?? summary.dolpEmpiricalPercent) + '%' : '不可报告'}\n`;
     csv += `# 消光比 ER: ${reportable ? `${summary.extinctionRatio} (${summary.extinctionRatioDB} dB)` : '不可报告'}\n`;
-    csv += `# 主轴偏角 θ0: ${reportable ? (p.theta0 ?? '-') + ' deg' : '不可报告'}, 拟合优度 R2: ${reportable ? (p.rSquaredPercent ?? '-') + '%' : '不可报告'}\n`;
+    csv += `# 主轴偏角 θ0: ${reportable ? (p.theta0 ?? '-') + ' deg' : '不可报告'}, 峰值偏角 θmax: ${reportable ? (p.thetaMax ?? '-') + ' deg' : '不可报告'}, 拟合优度 R2: ${reportable ? (p.rSquaredPercent ?? '-') + '%' : '不可报告'}\n`;
     csv += `# θ0 95% CI: ${reportable && p.theta0CI95 ? p.theta0CI95.join(' to ') + ' deg' : '-'}; 调制度代理 95% CI: ${reportable && p.dolpCI95Percent ? p.dolpCI95Percent.join(' to ') + '%' : '-'}\n`;
     csv += `# 拟合自由度: ${reportable ? (p.degreesOfFreedom ?? '-') : '不可报告'}; 条件数代理: ${reportable ? (p.conditionProxy ?? '-') : '不可报告'}\n`;
     csv += `# 实验元数据: ${JSON.stringify(provenance.experiment || {})}\n\n`;

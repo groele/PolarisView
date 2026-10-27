@@ -24,7 +24,7 @@ class StateStore {
     try {
       if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
         chrome.storage.local.get(['plo_state'], (result) => {
-          if (chrome.runtime.lastError) return;
+          if (chrome.runtime?.lastError) return;
           if (result && result.plo_state) {
             this.state = { ...this.state, ...result.plo_state };
             this.notifyListeners();
@@ -83,7 +83,7 @@ class StateStore {
     const metrics = {
       timestamp: Date.now(),
       extinctionRatio: summary ? summary.extinctionRatio : '-',
-      extinctionDB: summary ? summary.extinctionDB : '-',
+      extinctionDB: summary ? (summary.extinctionRatioDB ?? summary.extinctionDB ?? '-') : '-',
       modulation: summary ? summary.modulationPercent : '-',
       rSquared: fitResult ? fitResult.params.rSquaredPercent : '-',
       theta0: fitResult ? fitResult.params.theta0 : '-',

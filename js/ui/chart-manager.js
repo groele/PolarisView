@@ -93,6 +93,15 @@ class PolarChartManager {
   }
 
   getDolpExtrema(summary, fitResult) {
+    if (fitResult?.params && Number.isFinite(fitResult.params.thetaMax) && Number.isFinite(fitResult.params.fitMaxIntensity)) {
+      const p = fitResult.params;
+      const minAngle = Number.isFinite(p.thetaMin) ? p.thetaMin : ((p.thetaMax + 45) % 90);
+      const minVal = Number.isFinite(p.fitMinIntensity) ? p.fitMinIntensity : (summary?.minIntensity ?? 0);
+      return [
+        { value: Number(Math.max(0, minVal).toFixed(2)), angle: Number(minAngle.toFixed(1)), label: 'Imin' },
+        { value: Number(Math.max(0, p.fitMaxIntensity).toFixed(2)), angle: Number(p.thetaMax.toFixed(1)), label: 'Imax' }
+      ];
+    }
     if (fitResult?.denseFitCurve?.length) {
       const fitPoints = fitResult.denseFitCurve
         .map(([angle, value]) => ({ angle, value: Number(value) }))
@@ -250,8 +259,10 @@ class PolarChartManager {
     let maxVal = -Infinity;
     stepStats.forEach(s => {
       const samples = (s.values || []).filter(Number.isFinite);
-      minVal = Math.min(minVal, s.mean - (this.errorType === 'sd' ? s.sd : (this.errorType === 'se' ? s.se : 0)), ...samples);
-      maxVal = Math.max(maxVal, s.mean + (this.errorType === 'sd' ? s.sd : (this.errorType === 'se' ? s.se : 0)), ...samples);
+      const rawErr = this.errorType === 'sd' ? s.sd : (this.errorType === 'se' ? s.se : 0);
+      const err = Number.isFinite(rawErr) ? rawErr : 0;
+      minVal = Math.min(minVal, s.mean - err, ...samples);
+      maxVal = Math.max(maxVal, s.mean + err, ...samples);
     });
 
     const valMargin = (maxVal - minVal) * 0.1 || 50;
@@ -458,6 +469,9 @@ class PolarChartManager {
     }
 
     const dolpDisplay = reportable ? (fitResult ? fitResult.params.dolpPercent : summary.dolpEmpiricalPercent) : '不可报告';
+    const isDark = this.journalTheme === 'dark_lab';
+    const axisLabelColor = isDark ? '#cbd5e1' : '#334155';
+    const subTextColor = isDark ? '#94a3b8' : '#64748b';
 
     const polarOption = {
       title: {
@@ -467,8 +481,8 @@ class PolarChartManager {
           : '质量门已阻止物理指标输出；曲线仅供数据诊断',
         left: 'center',
         top: 6,
-        textStyle: { fontSize: 13, fontWeight: '700' },
-        subtextStyle: { fontSize: 10.5, color: '#64748b' }
+        textStyle: { fontSize: 13, fontWeight: '700', color: palette.text },
+        subtextStyle: { fontSize: 10.5, color: subTextColor }
       },
       tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
       legend: {
@@ -476,7 +490,7 @@ class PolarChartManager {
         data: legendData,
         selected: this.legendSelection(legendData, groups),
         itemGap: 10,
-        textStyle: { fontSize: 10.5 }
+        textStyle: { fontSize: 10.5, color: palette.text }
       },
       polar: {
         center: ['50%', '51%'],
@@ -492,7 +506,7 @@ class PolarChartManager {
           formatter: '{value}°',
           fontSize: 10.5,
           fontWeight: '600',
-          color: '#334155'
+          color: axisLabelColor
         },
         splitLine: { lineStyle: { color: 'rgba(128, 128, 128, 0.25)', type: 'dashed' } }
       },
@@ -502,7 +516,7 @@ class PolarChartManager {
           formatter: (v) => Math.round(v),
           fontSize: 9.5,
           fontFamily: 'monospace',
-          color: '#64748b'
+          color: subTextColor
         },
         splitLine: { lineStyle: { color: 'rgba(128, 128, 128, 0.2)' } }
       },
@@ -524,6 +538,8 @@ class PolarChartManager {
     const gColors = [palette.g1, palette.g2, palette.g3];
 
     groups.forEach((g, idx) => {
+      const showThisGroup = (this.displayMode === 'all') || (this.displayMode === g.id);
+      if (!showThisGroup) return;
       const pts = g.points.map(p => p.y);
       legendList.push(g.name);
       cartesianSeries.push({
@@ -533,7 +549,7 @@ class PolarChartManager {
         symbol: 'circle',
         symbolSize: 5,
         lineStyle: { width: 1.5, type: 'dashed', opacity: 0.8 },
-        itemStyle: { color: gColors[idx] }
+        itemStyle: { color: gColors[idx] || g.color }
       });
     });
 
@@ -613,16 +629,19 @@ class PolarChartManager {
       });
     }
 
-    legendList.push('均值 (Mean)');
-    cartesianSeries.push({
-      name: '均值 (Mean)',
-      type: 'line',
-      data: stepStats.map(s => s.mean),
-      symbol: 'diamond',
-      symbolSize: 6,
-      lineStyle: { width: 2.5 },
-      itemStyle: { color: palette.mean }
-    });
+    const showMean = (this.displayMode === 'all' || this.displayMode === 'mean_error');
+    if (showMean) {
+      legendList.push('均值 (Mean)');
+      cartesianSeries.push({
+        name: '均值 (Mean)',
+        type: 'line',
+        data: stepStats.map(s => s.mean),
+        symbol: 'diamond',
+        symbolSize: 6,
+        lineStyle: { width: 2.5 },
+        itemStyle: { color: palette.mean }
+      });
+    }
 
     if (this.filterConfig.type !== 'none') {
       legendList.push('平滑拟合');
@@ -657,6 +676,9 @@ class PolarChartManager {
     }
 
     const dolpDisplay = reportable ? (fitResult ? fitResult.params.dolpPercent : summary.dolpEmpiricalPercent) : '不可报告';
+    const isDark = this.journalTheme === 'dark_lab';
+    const axisLabelColor = isDark ? '#cbd5e1' : '#334155';
+    const subTextColor = isDark ? '#94a3b8' : '#64748b';
 
     const cartesianOption = {
       title: {
@@ -664,15 +686,15 @@ class PolarChartManager {
         subtext: reportable ? `调制度代理: ${dolpDisplay}% | 拟合最大值偏角 θmax: ${fitResult ? (fitResult.params.thetaMax ?? fitResult.params.theta0) : (summary ? summary.maxAngle : '-')}° | 消光比: ${summary.extinctionRatio} | 调制度: ${summary.modulationPercent}%` : '质量门已阻止物理指标输出；曲线仅供数据诊断',
         left: 'center',
         top: 8,
-        textStyle: { fontSize: 13, fontWeight: '700' },
-        subtextStyle: { fontSize: 10, color: '#64748b', lineHeight: 16 }
+        textStyle: { fontSize: 13, fontWeight: '700', color: palette.text },
+        subtextStyle: { fontSize: 10, color: subTextColor, lineHeight: 16 }
       },
       tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
       // Keep the metric subtitle and the series legend in separate rows.
-      legend: { top: 54, data: legendList, selected: this.legendSelection(legendList, groups), itemGap: 12, textStyle: { fontSize: 10 } },
+      legend: { top: 54, data: legendList, selected: this.legendSelection(legendList, groups), itemGap: 12, textStyle: { fontSize: 10, color: palette.text } },
       grid: { left: '6%', right: '4%', bottom: '12%', top: 88, containLabel: true },
-      xAxis: { type: 'category', data: angles, name: '相对角度', axisLabel: { interval: 2, rotate: 25, fontSize: 10 } },
-      yAxis: { type: 'value', name: '光强 (Counts)', scale: !this.radiusZeroBased },
+      xAxis: { type: 'category', data: angles, name: '相对角度', nameTextStyle: { color: axisLabelColor }, axisLabel: { interval: 2, rotate: 25, fontSize: 10, color: axisLabelColor } },
+      yAxis: { type: 'value', name: '光强 (Counts)', nameTextStyle: { color: axisLabelColor }, axisLabel: { color: axisLabelColor }, scale: !this.radiusZeroBased },
       series: cartesianSeries
     };
 
@@ -727,13 +749,17 @@ class PolarChartManager {
       });
     }
 
+    const palette = this.getPalette();
+    const isDark = this.journalTheme === 'dark_lab';
+    const axisLabelColor = isDark ? '#cbd5e1' : '#334155';
+
     const baselineOption = {
-      title: { text: 'X-Y 坐标轴体系：原始数据、背景基线与扣除净信号预览', left: 'center', top: 6, textStyle: { fontSize: 13, fontWeight: '700' } },
+      title: { text: 'X-Y 坐标轴体系：原始数据、背景基线与扣除净信号预览', left: 'center', top: 6, textStyle: { fontSize: 13, fontWeight: '700', color: palette.text } },
       tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
-      legend: { top: 28, data: legend, selected: this.legendSelection(legend), textStyle: { fontSize: 10.5 } },
+      legend: { top: 28, data: legend, selected: this.legendSelection(legend), textStyle: { fontSize: 10.5, color: palette.text } },
       grid: { left: '5%', right: '4%', bottom: '12%', top: '22%', containLabel: true },
-      xAxis: { type: 'category', data: xLabels, name: 'X (物理角度)', axisLabel: { interval: 5, rotate: 25, fontSize: 10 } },
-      yAxis: { type: 'value', name: '光强数值', scale: true },
+      xAxis: { type: 'category', data: xLabels, name: 'X (物理角度)', nameTextStyle: { color: axisLabelColor }, axisLabel: { interval: 5, rotate: 25, fontSize: 10, color: axisLabelColor } },
+      yAxis: { type: 'value', name: '光强数值', nameTextStyle: { color: axisLabelColor }, axisLabel: { color: axisLabelColor }, scale: true },
       series: series
     };
 
@@ -774,17 +800,21 @@ class PolarChartManager {
       }
     ];
 
+    const palette = this.getPalette();
+    const isDark = this.journalTheme === 'dark_lab';
+    const axisLabelColor = isDark ? '#cbd5e1' : '#334155';
+
     const residualOption = {
       title: {
         text: `经验谐波拟合残差 (Residual Plot) - RMSE: ${rmse} | R²: ${fitResult.params.rSquaredPercent}% | 调制度代理: ${fitResult.params.dolpPercent}%`,
         left: 'center',
         top: 6,
-        textStyle: { fontSize: 13, fontWeight: '700' }
+        textStyle: { fontSize: 13, fontWeight: '700', color: palette.text }
       },
       tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
       grid: { left: '5%', right: '5%', bottom: '12%', top: '22%', containLabel: true },
-      xAxis: { type: 'category', data: xLabels, name: '角度', axisLabel: { interval: 5, rotate: 25, fontSize: 10 } },
-      yAxis: { type: 'value', name: '残差 (Counts)' },
+      xAxis: { type: 'category', data: xLabels, name: '角度', nameTextStyle: { color: axisLabelColor }, axisLabel: { interval: 5, rotate: 25, fontSize: 10, color: axisLabelColor } },
+      yAxis: { type: 'value', name: '残差 (Counts)', nameTextStyle: { color: axisLabelColor }, axisLabel: { color: axisLabelColor } },
       series: resSeries
     };
 
@@ -801,7 +831,7 @@ class PolarChartManager {
     const legendList = [];
     const comboSeries = [];
 
-    this.getDolpReferenceRings(summary, fitResult).forEach(ref => {
+    (reportable ? this.getDolpReferenceRings(summary, fitResult) : []).forEach(ref => {
       const isMax = ref.label === 'Imax';
       comboSeries.push({
         name: `DoLP ${ref.label} reference`, type: 'line', coordinateSystem: 'polar', polarIndex: 0,
@@ -829,7 +859,8 @@ class PolarChartManager {
       const upperData = [];
       const lowerData = [];
       stepStats.forEach(s => {
-        const err = this.errorType === 'sd' ? s.sd : s.se;
+        const rawErr = this.errorType === 'sd' ? s.sd : s.se;
+        const err = Number.isFinite(rawErr) ? rawErr : 0;
         upperData.push([s.mean + err, s.relAngle]);
         lowerData.push([Math.max(0, s.mean - err), s.relAngle]);
       });
@@ -869,6 +900,8 @@ class PolarChartManager {
     }
 
     groups.forEach((g, idx) => {
+      const showThisGroup = (this.displayMode === 'all') || (this.displayMode === g.id);
+      if (!showThisGroup) return;
       legendList.push(g.name);
       const polarPts = g.points.map(p => [p.y, p.relAngle]);
       if (polarPts.length > 0) polarPts.push([polarPts[0][0], 360]);
@@ -881,7 +914,7 @@ class PolarChartManager {
         symbol: 'circle',
         symbolSize: 5,
         lineStyle: { width: 1.5, type: 'dashed', opacity: 0.8 },
-        itemStyle: { color: gColors[idx] },
+        itemStyle: { color: gColors[idx] || g.color },
         data: polarPts,
         z: 3
       });
@@ -895,42 +928,45 @@ class PolarChartManager {
         symbol: 'circle',
         symbolSize: 4,
         lineStyle: { width: 1.5, type: 'dashed', opacity: 0.8 },
-        itemStyle: { color: gColors[idx] },
+        itemStyle: { color: gColors[idx] || g.color },
         data: g.points.map(p => p.y),
         z: 3
       });
     });
 
-    legendList.push('均值 (Mean)');
-    const polarMeanPts = stepStats.map(s => [s.mean, s.relAngle]);
-    if (polarMeanPts.length > 0) polarMeanPts.push([polarMeanPts[0][0], 360]);
+    const showMean = (this.displayMode === 'all' || this.displayMode === 'mean_error');
+    if (showMean) {
+      legendList.push('均值 (Mean)');
+      const polarMeanPts = stepStats.map(s => [s.mean, s.relAngle]);
+      if (polarMeanPts.length > 0) polarMeanPts.push([polarMeanPts[0][0], 360]);
 
-    comboSeries.push({
-      name: '均值 (Mean)',
-      type: 'line',
-      coordinateSystem: 'polar',
-      polarIndex: 0,
-      symbol: 'diamond',
-      symbolSize: 6,
-      lineStyle: { width: 2.2 },
-      itemStyle: { color: palette.mean },
-      data: polarMeanPts,
-      z: 5
-    });
+      comboSeries.push({
+        name: '均值 (Mean)',
+        type: 'line',
+        coordinateSystem: 'polar',
+        polarIndex: 0,
+        symbol: 'diamond',
+        symbolSize: 6,
+        lineStyle: { width: 2.2 },
+        itemStyle: { color: palette.mean },
+        data: polarMeanPts,
+        z: 5
+      });
 
-    comboSeries.push({
-      name: '均值 (Mean)',
-      type: 'line',
-      coordinateSystem: 'cartesian2d',
-      xAxisIndex: 0,
-      yAxisIndex: 0,
-      symbol: 'diamond',
-      symbolSize: 5,
-      lineStyle: { width: 2.2 },
-      itemStyle: { color: palette.mean },
-      data: stepStats.map(s => s.mean),
-      z: 5
-    });
+      comboSeries.push({
+        name: '均值 (Mean)',
+        type: 'line',
+        coordinateSystem: 'cartesian2d',
+        xAxisIndex: 0,
+        yAxisIndex: 0,
+        symbol: 'diamond',
+        symbolSize: 5,
+        lineStyle: { width: 2.2 },
+        itemStyle: { color: palette.mean },
+        data: stepStats.map(s => s.mean),
+        z: 5
+      });
+    }
 
     if (this.filterConfig.type !== 'none') {
       legendList.push('平滑拟合');
@@ -1011,6 +1047,9 @@ class PolarChartManager {
     }
 
     const dolpDisplay = reportable ? (fitResult ? fitResult.params.dolpPercent : summary.dolpEmpiricalPercent) : '不可报告';
+    const isDark = this.journalTheme === 'dark_lab';
+    const axisLabelColor = isDark ? '#cbd5e1' : '#334155';
+    const subTextColor = isDark ? '#94a3b8' : '#64748b';
 
     const comboOption = {
       title: [
@@ -1019,14 +1058,14 @@ class PolarChartManager {
           left: '26%',
           top: 10,
           textAlign: 'center',
-          textStyle: { fontSize: 12.5, fontWeight: '700' }
+          textStyle: { fontSize: 12.5, fontWeight: '700', color: palette.text }
         },
         {
           text: reportable ? `直角坐标角度展开 (ER: ${summary.extinctionRatio})` : '直角坐标展开（不可报告）',
           left: '74%',
           top: 10,
           textAlign: 'center',
-          textStyle: { fontSize: 12.5, fontWeight: '700' }
+          textStyle: { fontSize: 12.5, fontWeight: '700', color: palette.text }
         }
       ],
       tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
@@ -1034,7 +1073,7 @@ class PolarChartManager {
         bottom: 6,
         data: legendList,
         selected: this.legendSelection(legendList, groups),
-        textStyle: { fontSize: 10.5 }
+        textStyle: { fontSize: 10.5, color: palette.text }
       },
       polar: {
         center: ['26%', '52%'],
@@ -1047,13 +1086,13 @@ class PolarChartManager {
         clockwise: this.polarAxisConfig.clockwise,
         min: 0, max: 360,
         interval: this.polarAxisConfig.interval,
-        axisLabel: { formatter: '{value}°', fontSize: 10, color: '#334155' },
+        axisLabel: { formatter: '{value}°', fontSize: 10, color: axisLabelColor },
         splitLine: { lineStyle: { color: 'rgba(128, 128, 128, 0.25)', type: 'dashed' } }
       },
       radiusAxis: {
         polarIndex: 0,
         min: rMin, max: rMax,
-        axisLabel: { formatter: (v) => Math.round(v), fontSize: 9, fontFamily: 'monospace' },
+        axisLabel: { formatter: (v) => Math.round(v), fontSize: 9, fontFamily: 'monospace', color: subTextColor },
         splitLine: { lineStyle: { color: 'rgba(128, 128, 128, 0.2)' } }
       },
       grid: {
@@ -1068,12 +1107,15 @@ class PolarChartManager {
         type: 'category',
         data: angles,
         name: '相对角度',
-        axisLabel: { interval: 3, rotate: 25, fontSize: 9 }
+        nameTextStyle: { color: axisLabelColor },
+        axisLabel: { interval: 3, rotate: 25, fontSize: 9, color: axisLabelColor }
       },
       yAxis: {
         gridIndex: 0,
         type: 'value',
         name: '光强 (Counts)',
+        nameTextStyle: { color: axisLabelColor },
+        axisLabel: { color: axisLabelColor },
         scale: !this.radiusZeroBased
       },
       series: comboSeries
@@ -1083,10 +1125,42 @@ class PolarChartManager {
     this.bindLegendInteraction(chart, groups);
   }
 
+  renderChartToSvgDataUrl(targetChart, backgroundColor = '#ffffff') {
+    if (!targetChart || targetChart.isDisposed() || !window.echarts) return '';
+    const width = Math.max(640, targetChart.getWidth() || 880);
+    const height = Math.max(480, targetChart.getHeight() || 600);
+    const offscreenDom = document.createElement('div');
+    offscreenDom.style.width = `${width}px`;
+    offscreenDom.style.height = `${height}px`;
+    offscreenDom.style.position = 'absolute';
+    offscreenDom.style.left = '-9999px';
+    offscreenDom.style.top = '-9999px';
+    document.body.appendChild(offscreenDom);
+
+    let svgChart = null;
+    try {
+      svgChart = echarts.init(offscreenDom, null, { renderer: 'svg', width, height });
+      const option = { ...targetChart.getOption(), backgroundColor, animation: false };
+      svgChart.setOption(option, true);
+      if (typeof svgChart.renderToSVGString === 'function') {
+        const svgStr = svgChart.renderToSVGString();
+        return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svgStr)}`;
+      }
+      return svgChart.getDataURL({ type: 'svg', backgroundColor });
+    } finally {
+      if (svgChart) {
+        try { svgChart.dispose(); } catch (e) {}
+      }
+      if (offscreenDom.parentNode) {
+        offscreenDom.parentNode.removeChild(offscreenDom);
+      }
+    }
+  }
+
   async exportImage(chartType = 'polar', format = 'png', pixelRatio = 3) {
     if (chartType === 'overlay') {
       if (window.app?.overlayManager) {
-        await window.app.overlayManager.exportOverlayImage({ format, scale: pixelRatio });
+        await window.app.overlayManager.exportOverlayImage({ format: format === 'svg' ? 'png' : format, scale: pixelRatio });
       }
       return;
     }
@@ -1108,11 +1182,14 @@ class PolarChartManager {
     if (!targetChart || targetChart.isDisposed()) return;
 
     try {
-      const url = targetChart.getDataURL({
-        type: format === 'svg' ? 'svg' : 'png',
-        pixelRatio: pixelRatio,
-        backgroundColor: '#ffffff'
-      });
+      const bg = this.journalTheme === 'dark_lab' ? '#0f172a' : '#ffffff';
+      const url = format === 'svg'
+        ? this.renderChartToSvgDataUrl(targetChart, bg)
+        : targetChart.getDataURL({
+            type: 'png',
+            pixelRatio: pixelRatio,
+            backgroundColor: bg
+          });
       this.triggerDownload(url, `polarization_${chartType}_plot.${format}`);
     } catch (e) {
       console.error('导出图像异常:', e);
@@ -1125,8 +1202,25 @@ class PolarChartManager {
     if (!chartA || !chartB || chartA.isDisposed() || chartB.isDisposed()) return;
 
     try {
-      const urlA = chartA.getDataURL({ type: 'png', pixelRatio, backgroundColor: '#ffffff' });
-      const urlB = chartB.getDataURL({ type: 'png', pixelRatio, backgroundColor: '#ffffff' });
+      const bg = this.journalTheme === 'dark_lab' ? '#0f172a' : '#ffffff';
+      if (format === 'svg') {
+        const wA = Math.max(640, chartA.getWidth() || 640);
+        const hA = Math.max(480, chartA.getHeight() || 520);
+        const wB = Math.max(640, chartB.getWidth() || 640);
+        const hB = Math.max(480, chartB.getHeight() || 520);
+        const gap = 16;
+        const totalW = wA + wB + gap;
+        const totalH = Math.max(hA, hB);
+        const urlA = this.renderChartToSvgDataUrl(chartA, bg);
+        const urlB = this.renderChartToSvgDataUrl(chartB, bg);
+        const combinedSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="${totalH}" viewBox="0 0 ${totalW} ${totalH}"><rect width="100%" height="100%" fill="${bg}"/><image href="${urlA}" x="0" y="0" width="${wA}" height="${hA}"/><image href="${urlB}" x="${wA + gap}" y="0" width="${wB}" height="${hB}"/></svg>`;
+        const svgDataUrl = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(combinedSvg)}`;
+        this.triggerDownload(svgDataUrl, 'polarization_dual_comparison_plot.svg');
+        return;
+      }
+
+      const urlA = chartA.getDataURL({ type: 'png', pixelRatio, backgroundColor: bg });
+      const urlB = chartB.getDataURL({ type: 'png', pixelRatio, backgroundColor: bg });
 
       const imgA = new Image();
       const imgB = new Image();
@@ -1142,14 +1236,14 @@ class PolarChartManager {
       canvas.height = Math.max(imgA.height, imgB.height);
 
       const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = bg;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       ctx.drawImage(imgA, 0, 0);
       ctx.drawImage(imgB, imgA.width + gap, 0);
 
-      const stitchedUrl = canvas.toDataURL(format === 'svg' ? 'image/png' : `image/${format}`);
-      this.triggerDownload(stitchedUrl, `polarization_dual_comparison_plot.${format === 'svg' ? 'png' : format}`);
+      const stitchedUrl = canvas.toDataURL(`image/${format}`);
+      this.triggerDownload(stitchedUrl, `polarization_dual_comparison_plot.${format}`);
     } catch (e) {
       console.error('双联拼接导出异常:', e);
       alert('双联图导出失败，请重试');

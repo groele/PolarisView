@@ -44,6 +44,8 @@ class XlsxExporter {
       ['Modulation_proxy_percent', reportable ? (p.dolpPercent ?? state.stats?.summary?.dolpEmpiricalPercent ?? '') : 'not reportable'],
       ['Extinction_ratio', reportable ? (state.stats?.summary?.extinctionRatio ?? '') : 'not reportable'],
       ['Fit_R_squared_percent', reportable ? (p.rSquaredPercent ?? '') : 'not reportable'],
+      ['Axis_theta0_deg', reportable ? (p.theta0 ?? '') : 'not reportable'],
+      ['Peak_thetaMax_deg', reportable ? (p.thetaMax ?? '') : 'not reportable'],
       ['Axis_theta0_CI95_deg', reportable && p.theta0CI95 ? p.theta0CI95.join(' to ') : ''],
       ['Modulation_proxy_CI95_percent', reportable && p.dolpCI95Percent ? p.dolpCI95Percent.join(' to ') : ''],
       ['Fit_degrees_of_freedom', reportable ? (p.degreesOfFreedom ?? '') : 'not reportable'],

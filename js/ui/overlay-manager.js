@@ -968,7 +968,8 @@ class PolarOverlayManager {
     const height = this.canvas.height || 600;
 
     // 严密重置画布 2D 变换矩阵与滤镜状态，杜绝硬件加速下切片渲染残留与黑块 (Black tile clipping)
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const exportScale = this._exportScale || 1;
+    ctx.setTransform(exportScale, 0, 0, exportScale, 0, 0);
     ctx.filter = 'none';
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
@@ -1192,24 +1193,29 @@ class PolarOverlayManager {
     // 设置整体透明度
     ctx.globalAlpha = cfg.opacity;
 
+    const reportable = this.polarData?.qualityAudit
+      ? this.polarData.qualityAudit.claimLevel !== 'blocked'
+      : (this.polarData?.isReportable !== false);
+    const activeFit = reportable ? (this.polarData?.fitResult || this.polarData?.polarFit) : null;
+
     // 3. 绘制误差阴影带 (Error Band)
-    if (cfg.mode === 'all') {
+    if (reportable && cfg.mode === 'all') {
       this.drawErrorBand(ctx, radius, pal);
     }
 
     // 4. 绘制马吕斯理论拟合曲线 (Dense Malus Curve)
-    if ((cfg.mode === 'all' || cfg.mode === 'fit_only') && this.polarData?.polarFit?.denseFitCurve?.length) {
+    if (reportable && (cfg.mode === 'all' || cfg.mode === 'fit_only') && activeFit?.denseFitCurve?.length) {
       this.drawFitCurve(ctx, radius, pal, cfg.lineWidth);
     }
 
     // 5. 绘制实验实测数据点与均值折线
     if (cfg.mode === 'all' || cfg.mode === 'points_only') {
-      this.drawDataPoints(ctx, radius, pal);
+      this.drawDataPoints(ctx, radius, pal, reportable);
     }
 
     // 6. 绘制快轴主轴 / 拟合最大值方向指示射线与角标牌 (θmax)
-    const fitTheta = this.polarData?.polarFit?.params?.thetaMax ?? this.polarData?.polarFit?.params?.theta0 ?? this.polarData?.polarFit?.params?.theta0Deg;
-    if (cfg.showFastAxis && fitTheta !== undefined && fitTheta !== null) {
+    const fitTheta = activeFit?.params?.thetaMax ?? activeFit?.params?.theta0 ?? activeFit?.params?.theta0Deg;
+    if (reportable && cfg.showFastAxis && fitTheta !== undefined && fitTheta !== null) {
       this.drawFastAxisIndicator(ctx, radius, pal);
     }
 
@@ -1281,9 +1287,14 @@ class PolarOverlayManager {
   }
 
   drawPolarGrid(ctx, radius, pal) {
-    const isDarkBg = this.overlayConfig.bgStyle === 'dark' || (!this.image);
-    const gridColor = isDarkBg ? 'rgba(255, 255, 255, 0.35)' : 'rgba(255, 255, 255, 0.55)';
-    const textColor = isDarkBg ? 'rgba(255, 255, 255, 0.8)' : 'rgba(255, 255, 255, 0.95)';
+    const isWhiteBg = this.overlayConfig.bgStyle === 'white';
+    const isDarkBg = this.overlayConfig.bgStyle === 'dark' || (!this.image && !isWhiteBg);
+    const gridColor = isWhiteBg
+      ? (pal.gridDark || 'rgba(15, 23, 42, 0.35)')
+      : (isDarkBg ? 'rgba(255, 255, 255, 0.35)' : 'rgba(255, 255, 255, 0.55)');
+    const textColor = isWhiteBg
+      ? (pal.textDark || '#0f172a')
+      : (isDarkBg ? 'rgba(255, 255, 255, 0.8)' : 'rgba(255, 255, 255, 0.95)');
 
     ctx.save();
     ctx.strokeStyle = gridColor;
@@ -1311,7 +1322,9 @@ class PolarOverlayManager {
     // 主正交轴 (0°-180°, 90°-270°) 实线
     if (this.overlayConfig.showAxes) {
       ctx.lineWidth = 1.2;
-      ctx.strokeStyle = isDarkBg ? 'rgba(255, 255, 255, 0.6)' : 'rgba(255, 255, 255, 0.85)';
+      ctx.strokeStyle = isWhiteBg
+        ? 'rgba(15, 23, 42, 0.65)'
+        : (isDarkBg ? 'rgba(255, 255, 255, 0.6)' : 'rgba(255, 255, 255, 0.85)');
       ctx.beginPath();
       ctx.moveTo(-radius * 1.03, 0); ctx.lineTo(radius * 1.03, 0);
       ctx.moveTo(0, -radius * 1.03); ctx.lineTo(0, radius * 1.03);
@@ -1323,8 +1336,9 @@ class PolarOverlayManager {
 
   drawAngleLabels(ctx, radius, pal) {
     ctx.save();
-    ctx.fillStyle = '#ffffff';
-    ctx.shadowColor = 'rgba(0,0,0,0.85)';
+    const isWhiteBg = this.overlayConfig.bgStyle === 'white';
+    ctx.fillStyle = isWhiteBg ? (pal.textDark || '#0f172a') : '#ffffff';
+    ctx.shadowColor = isWhiteBg ? 'rgba(255, 255, 255, 0.85)' : 'rgba(0,0,0,0.85)';
     ctx.shadowBlur = 4;
     ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
     ctx.textAlign = 'center';
@@ -1424,13 +1438,14 @@ class PolarOverlayManager {
     ctx.restore();
   }
 
-  drawDataPoints(ctx, radius, pal) {
+  drawDataPoints(ctx, radius, pal, reportable = true) {
     ctx.save();
 
-    // 如果有分组数据，绘制离散实测点
-    const groups = this.polarData?.groups || [];
+    // 如果有分组数据，仅绘制当前参与分析的可见组离散实测点
+    const groups = this.polarData?.activeGroups || this.polarData?.groups || [];
     groups.forEach((group, gIdx) => {
-      const color = (gIdx === 0 ? pal.points : (gIdx === 1 ? pal.mean : pal.fit));
+      const colorIdx = Number.isFinite(group.groupIndex) ? group.groupIndex : gIdx;
+      const color = (colorIdx === 0 ? pal.points : (colorIdx === 1 ? pal.mean : pal.fit));
       ctx.fillStyle = color;
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 1;
@@ -1450,7 +1465,7 @@ class PolarOverlayManager {
 
     // 绘制均值连接折线
     const stepStats = this.polarData?.stats?.stepStats;
-    if (Array.isArray(stepStats) && stepStats.length > 0) {
+    if (reportable && Array.isArray(stepStats) && stepStats.length > 0) {
       ctx.strokeStyle = pal.mean;
       ctx.lineWidth = 1.8;
       ctx.beginPath();
@@ -1468,6 +1483,12 @@ class PolarOverlayManager {
     ctx.restore();
   }
 
+  isReportable() {
+    return this.polarData?.qualityAudit
+      ? this.polarData.qualityAudit.claimLevel !== 'blocked'
+      : (this.polarData?.isReportable !== false);
+  }
+
   setData(parsedState) {
     this.polarData = parsedState;
     try {
@@ -1479,6 +1500,7 @@ class PolarOverlayManager {
 
   setTheme(theme) {
     this.overlayConfig.theme = theme;
+    if (this.onConfigChange) this.onConfigChange(this.overlayConfig);
     try {
       this.render();
     } catch (e) {}
@@ -1567,8 +1589,68 @@ class PolarOverlayManager {
   drawAcademicBadge(ctx, width, height) {
     ctx.save();
 
+    const reportable = this.polarData?.qualityAudit
+      ? this.polarData.qualityAudit.claimLevel !== 'blocked'
+      : (this.polarData?.isReportable !== false);
+
+    // 卡片内文字与科学指标 (确保 θmax 100% 准确同步，并遵循质量门控)
+    const sampleId = this.polarData?.metadata?.sampleId 
+      || (this.isSampleImage ? (this.currentPresetSampleName || '2D Sample') : (this.imageName ? this.imageName : (this.polarData ? '极坐标数据就绪' : '等待导入数据')));
+    const p = reportable ? (this.polarData?.fitResult?.params || this.polarData?.polarFit?.params) : null;
+    const rawTheta0 = p?.thetaMax ?? p?.theta0 ?? p?.theta0Deg;
+    const numTheta = parseFloat(rawTheta0);
+    const thetaStr = reportable
+      ? (Number.isFinite(numTheta) ? `${numTheta.toFixed(1)}°` : 'N/A')
+      : '不可报告';
+
+    const rot = this.overlayConfig.rotation || 0;
+    let deltaThetaText = '';
+    if (reportable && Number.isFinite(numTheta)) {
+      let delta = Math.abs(numTheta - rot) % 180;
+      if (delta > 90) delta = 180 - delta;
+      deltaThetaText = ` · Δθ: ${delta.toFixed(1)}°`;
+    }
+
+    const rawER = reportable ? this.polarData?.summary?.extinctionRatio : null;
+    const numER = parseFloat(rawER);
+    const erStr = reportable
+      ? (Number.isFinite(numER) ? (numER > 999 ? '>999' : numER.toFixed(1)) : (rawER || 'N/A'))
+      : '不可报告';
+    const rawERDB = reportable ? this.polarData?.summary?.extinctionRatioDB : null;
+    const erDBStr = rawERDB ? ` (${rawERDB} dB)` : '';
+
+    const rawDolp = reportable ? (this.polarData?.summary?.dolp ?? p?.dolp) : null;
+    const numDolp = parseFloat(rawDolp);
+
+    const r2Val = reportable
+      ? (p?.rSquaredPercent ? `${p.rSquaredPercent}%` : (p?.rSquared ? `${(p.rSquared * 100).toFixed(1)}%` : null))
+      : null;
+
+    const flipTag = (this.imageFilters.flipX && this.imageFilters.flipY)
+      ? ' · 镜像: X+Y'
+      : (this.imageFilters.flipX
+        ? ' · 镜像: X轴'
+        : (this.imageFilters.flipY ? ' · 镜像: Y轴' : ''));
+
+    const line1Text = `🔬 ${sampleId}`;
+    const r2Text = r2Val ? ` · R²: ${r2Val}` : '';
+    const line2Text = `Align: ${rot}°${deltaThetaText}${r2Text}`;
+    const line3Text = `θmax: ${thetaStr}  |  ER: ${erStr}${erDBStr}`;
+    const line4Text = !reportable
+      ? `状态: 质量门已阻止结论 (仅诊断)${flipTag}`
+      : (Number.isFinite(numDolp)
+        ? `DoLP: ${(numDolp * 100).toFixed(1)}% (调制度)${flipTag}`
+        : (this.image ? `底图: 已叠加光学显微图${flipTag}` : '底图: 待导入光学显微图'));
+
+    ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    const w1 = typeof ctx.measureText === 'function' ? ctx.measureText(line1Text).width : 200;
+    ctx.font = '11px ui-monospace, Consolas, monospace';
+    const w2 = typeof ctx.measureText === 'function' ? ctx.measureText(line2Text).width : 200;
+    const w3 = typeof ctx.measureText === 'function' ? ctx.measureText(line3Text).width : 200;
+    const w4 = typeof ctx.measureText === 'function' ? ctx.measureText(line4Text).width : 200;
+
     const pad = 16;
-    const cardW = 256;
+    const cardW = Math.min(Math.max(256, Math.ceil(Math.max(w1, w2, w3, w4) + 24)), Math.max(256, width - pad * 2));
     const cardH = 88;
     const corner = this.overlayConfig.badgeCorner || 'bottom-right';
 
@@ -1606,59 +1688,27 @@ class PolarOverlayManager {
     ctx.stroke();
     ctx.shadowBlur = 0;
 
-    // 卡片内文字与科学指标 (确保 θmax 100% 准确同步!)
-    const sampleId = this.polarData?.metadata?.sampleId 
-      || (this.isSampleImage ? (this.currentPresetSampleName || '2D Sample') : (this.imageName ? this.imageName : (this.polarData ? '极坐标数据就绪' : '等待导入数据')));
-    const p = this.polarData?.polarFit?.params;
-    // 关键修复：优先采用 thetaMax 作为最大光强方位角，彻底杜绝指标打架
-    const rawTheta0 = p?.thetaMax ?? p?.theta0 ?? p?.theta0Deg;
-    const numTheta = parseFloat(rawTheta0);
-    const thetaStr = Number.isFinite(numTheta) ? `${numTheta.toFixed(1)}°` : 'N/A';
-
-    const rot = this.overlayConfig.rotation || 0;
-    let deltaThetaText = '';
-    if (Number.isFinite(numTheta)) {
-      let delta = Math.abs(numTheta - rot) % 180;
-      if (delta > 90) delta = 180 - delta;
-      deltaThetaText = ` · Δθ: ${delta.toFixed(1)}°`;
-    }
-
-    const rawER = this.polarData?.summary?.extinctionRatio;
-    const numER = parseFloat(rawER);
-    const erStr = Number.isFinite(numER) ? (numER > 999 ? '>999' : numER.toFixed(1)) : (rawER || 'N/A');
-    const rawERDB = this.polarData?.summary?.extinctionRatioDB;
-    const erDBStr = rawERDB ? ` (${rawERDB} dB)` : '';
-
-    const rawDolp = this.polarData?.summary?.dolp ?? p?.dolp;
-    const numDolp = parseFloat(rawDolp);
-
-    const r2Val = p?.rSquaredPercent ? `${p.rSquaredPercent}%` : (p?.rSquared ? `${(p.rSquared * 100).toFixed(1)}%` : null);
-
-    const flipTag = (this.imageFilters.flipX && this.imageFilters.flipY)
-      ? ' · 镜像: X+Y'
-      : (this.imageFilters.flipX
-        ? ' · 镜像: X轴'
-        : (this.imageFilters.flipY ? ' · 镜像: Y轴' : ''));
-
     ctx.fillStyle = '#f8fafc';
     ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText(`🔬 ${sampleId}`, cardX + 12, cardY + 20);
+    ctx.fillText(line1Text, cardX + 12, cardY + 20);
 
     ctx.font = '11px ui-monospace, Consolas, monospace';
     ctx.fillStyle = '#94a3b8';
-    const r2Text = r2Val ? ` · R²: ${r2Val}` : '';
-    ctx.fillText(`Align: ${rot}°${deltaThetaText}${r2Text}`, cardX + 12, cardY + 38);
+    ctx.fillText(line2Text, cardX + 12, cardY + 38);
 
-    ctx.fillStyle = '#38bdf8';
-    ctx.fillText(`θmax: ${thetaStr}  |  ER: ${erStr}${erDBStr}`, cardX + 12, cardY + 54);
+    ctx.fillStyle = reportable ? '#38bdf8' : '#f87171';
+    ctx.fillText(line3Text, cardX + 12, cardY + 54);
 
-    if (Number.isFinite(numDolp)) {
+    if (!reportable) {
+      ctx.fillStyle = '#fca5a5';
+      ctx.fillText(line4Text, cardX + 12, cardY + 70);
+    } else if (Number.isFinite(numDolp)) {
       ctx.fillStyle = '#4ade80';
-      ctx.fillText(`DoLP: ${(numDolp * 100).toFixed(1)}% (调制度)${flipTag}`, cardX + 12, cardY + 70);
+      ctx.fillText(line4Text, cardX + 12, cardY + 70);
     } else {
       ctx.fillStyle = this.image ? '#a78bfa' : '#64748b';
-      ctx.fillText(this.image ? `底图: 已叠加光学显微图${flipTag}` : '底图: 待导入光学显微图', cardX + 12, cardY + 70);
+      ctx.fillText(line4Text, cardX + 12, cardY + 70);
     }
 
     ctx.restore();
@@ -1667,10 +1717,11 @@ class PolarOverlayManager {
   getDataExtrema() {
     let maxVal = -Infinity;
     let minVal = Infinity;
+    const reportable = this.isReportable();
 
     // 1. 从 stepStats 统计步中获取范围 (mean, sd, sampleValues)
     const stepStats = this.polarData?.stats?.stepStats;
-    if (Array.isArray(stepStats) && stepStats.length > 0) {
+    if (reportable && Array.isArray(stepStats) && stepStats.length > 0) {
       stepStats.forEach(s => {
         const samples = (s.sampleValues || s.values || []).filter(Number.isFinite);
         if (Number.isFinite(s.mean)) {
@@ -1680,9 +1731,10 @@ class PolarOverlayManager {
       });
     }
 
-    // 2. 从 groups 原始点中获取
-    if (this.polarData?.groups?.length) {
-      this.polarData.groups.forEach(g => {
+    // 2. 从参与分析的可见组原始点中获取
+    const activeGroups = this.polarData?.activeGroups || this.polarData?.groups || [];
+    if (activeGroups.length) {
+      activeGroups.forEach(g => {
         (g.points || []).forEach(p => {
           if (Number.isFinite(p.y)) {
             minVal = Math.min(minVal, p.y);
@@ -1693,8 +1745,9 @@ class PolarOverlayManager {
     }
 
     // 3. 从 denseFitCurve 理论曲线中获取
-    if (this.polarData?.polarFit?.denseFitCurve?.length) {
-      this.polarData.polarFit.denseFitCurve.forEach(([_, val]) => {
+    const fitCurve = (this.polarData?.fitResult || this.polarData?.polarFit)?.denseFitCurve;
+    if (reportable && fitCurve?.length) {
+      fitCurve.forEach(([_, val]) => {
         if (Number.isFinite(val)) {
           minVal = Math.min(minVal, val);
           maxVal = Math.max(maxVal, val);
@@ -1734,18 +1787,18 @@ class PolarOverlayManager {
     offCanvas.height = exportH;
     const offCtx = offCanvas.getContext('2d');
 
-    // 缩放上下文至指定高分辨率
-    offCtx.scale(scale, scale);
-
-    // 临时切换上下文绘制高分辨率画布
+    // 临时切换上下文与导出倍率绘制高分辨率画布
     const origCtx = this.ctx;
     const origCanvas = this.canvas;
+    const origExportScale = this._exportScale;
     this.ctx = offCtx;
+    this._exportScale = scale;
     this.canvas = { width: baseW, height: baseH, getBoundingClientRect: () => origCanvas.getBoundingClientRect() };
 
     try {
       this.render();
     } finally {
+      this._exportScale = origExportScale;
       this.ctx = origCtx;
       this.canvas = origCanvas;
     }

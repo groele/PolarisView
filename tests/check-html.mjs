@@ -6,6 +6,19 @@ const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]);
 const duplicateIds = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
 assert.deepEqual(duplicateIds, [], `Duplicate element IDs: ${duplicateIds.join(', ')}`);
 
+const idSet = new Set(ids);
+const internalHrefIds = [...html.matchAll(/\bhref="#([^"]+)"/g)].map(match => match[1]);
+for (const refId of internalHrefIds) {
+  assert.ok(idSet.has(refId), `Missing internal href target ID: #${refId}`);
+}
+
+const idRefAttrs = [...html.matchAll(/\b(?:for|aria-controls|aria-labelledby)="([^"]+)"/g)]
+  .flatMap(match => match[1].trim().split(/\s+/))
+  .filter(Boolean);
+for (const refId of idRefAttrs) {
+  assert.ok(idSet.has(refId), `Missing referenced element ID: ${refId}`);
+}
+
 const localReferences = [...html.matchAll(/\b(?:src|href)="([^"]+)"/g)]
   .map(match => match[1].split('#')[0].split('?')[0])
   .filter(reference => reference && !/^(?:https?:|data:|#)/.test(reference));
