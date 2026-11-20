@@ -42,6 +42,7 @@ class PolarizationApp {
       this.overlayManager = new PolarOverlayManager('overlayCanvas');
       this.overlayManager.onConfigChange = (cfg) => this.syncOverlayControls(cfg);
       this.overlayManager.onImageLoaded = (name, w, h, dataUrl) => this.updateOverlayImageStatus(name, w, h, dataUrl);
+      this.overlayManager.onHudFeedback = (msg) => this.showOverlayLiveHud(msg);
 
       // 2. 初始化表格式交互编辑组件
       this.tableGrid = new TableGrid('tableInputContainer', {
@@ -387,6 +388,7 @@ class PolarizationApp {
         }
       }
 
+      this.updateEmptyWorkspaceVisibility();
       this.chartManager.render();
       setTimeout(() => {
         this.chartManager.resize();
@@ -514,7 +516,46 @@ class PolarizationApp {
     this.bindOverlayEvents();
   }
 
+  showOverlayLiveHud(msg) {
+    if (this.activeView !== 'overlay') return;
+    const pill = document.getElementById('overlayLiveHudPill');
+    if (!pill) return;
+    pill.textContent = msg;
+    pill.style.display = 'block';
+    pill.style.opacity = '1';
+    if (this._overlayLiveHudTimer) clearTimeout(this._overlayLiveHudTimer);
+    this._overlayLiveHudTimer = setTimeout(() => {
+      pill.style.opacity = '0';
+      setTimeout(() => {
+        if (pill.style.opacity === '0') pill.style.display = 'none';
+      }, 220);
+    }, 1150);
+  }
+
   showOverlayToast(msg) {
+    if (this.activeView !== 'overlay') {
+      const step1Badge = document.getElementById('step1OptStatusBadge');
+      if (step1Badge) {
+        if (!this._step1BadgeRestoreState) {
+          this._step1BadgeRestoreState = {
+            text: step1Badge.textContent,
+            className: step1Badge.className
+          };
+        }
+        step1Badge.textContent = msg;
+        step1Badge.className = 'badge badge-primary';
+        if (this._step1BadgeToastTimer) clearTimeout(this._step1BadgeToastTimer);
+        this._step1BadgeToastTimer = setTimeout(() => {
+          if (this._step1BadgeRestoreState) {
+            step1Badge.textContent = this._step1BadgeRestoreState.text;
+            step1Badge.className = this._step1BadgeRestoreState.className;
+            this._step1BadgeRestoreState = null;
+          }
+        }, 3200);
+      }
+      return;
+    }
+
     const toast = document.getElementById('overlayToast');
     const toastText = document.getElementById('overlayToastText');
     if (!toast || !toastText) return;
@@ -528,17 +569,204 @@ class PolarizationApp {
     }, 3200);
   }
 
+  buildPastedImageName(mimeType = 'image/png') {
+    const rawExt = (mimeType && mimeType.split('/')[1]) || 'png';
+    const ext = rawExt.split('+')[0].replace(/[^a-z0-9]/gi, '') || 'png';
+    const stamp = new Date().toTimeString().slice(0, 8).replace(/:/g, '');
+    return `pasted_optical_${stamp}.${ext}`;
+  }
+
+  dataUrlToImageFile(dataUrl) {
+    if (!dataUrl || typeof dataUrl !== 'string') return null;
+    const match = dataUrl.trim().match(/^data:(image\/[a-z0-9+.-]+);base64,([A-Za-z0-9+/=\s]+)$/i);
+    if (!match) return null;
+    try {
+      const mime = match[1].toLowerCase();
+      const binary = atob(match[2].replace(/\s+/g, ''));
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return new File([bytes], this.buildPastedImageName(mime), { type: mime });
+    } catch {
+      return null;
+    }
+  }
+
+  extractDataUrlFromHtmlOrText(htmlText, plainText) {
+    if (htmlText) {
+      const imgMatch = htmlText.match(/<img[^>]+src=["'](data:image\/[^"']+)["']/i);
+      if (imgMatch && imgMatch[1]) {
+        const file = this.dataUrlToImageFile(imgMatch[1]);
+        if (file) return file;
+      }
+    }
+    if (plainText && /^data:image\//i.test(plainText.trim())) {
+      return this.dataUrlToImageFile(plainText.trim());
+    }
+    return null;
+  }
+
+  importOpticalImageFile(file, actionLabel = '导入') {
+    if (!file || !this.overlayManager) return false;
+    const started = this.overlayManager.loadImageFromFile(file);
+    if (!started) return false;
+    this._step1BadgeRestoreState = null;
+    this.switchToView('overlay');
+    const displayName = file.name || '剪贴板光学图';
+    this.showOverlayToast(`已${actionLabel}光学照片: ${displayName}，已自动切换至叠加视图`);
+    return true;
+  }
+
+  extractImageFileFromClipboard(clipboardData) {
+    if (!clipboardData) return null;
+
+    let rawFile = null;
+    if (clipboardData.items && clipboardData.items.length > 0) {
+      for (const item of clipboardData.items) {
+        if (item.kind === 'file' && item.type && item.type.startsWith('image/')) {
+          rawFile = item.getAsFile();
+          if (rawFile) break;
+        }
+      }
+    }
+
+    if (!rawFile && clipboardData.files && clipboardData.files.length > 0) {
+      for (const file of clipboardData.files) {
+        const isImg = (file.type && file.type.startsWith('image/')) ||
+          /\.(png|jpe?g|webp|bmp|gif|svg|tif|tiff)$/i.test(file.name || '');
+        if (isImg) {
+          rawFile = file;
+          break;
+        }
+      }
+    }
+
+    if (rawFile) {
+      // 截图粘贴通常没有文件名或统一为 image.png，生成带时间戳的可读文件名
+      if (!rawFile.name || rawFile.name === 'image.png') {
+        const mime = rawFile.type || 'image/png';
+        return new File([rawFile], this.buildPastedImageName(mime), {
+          type: mime,
+          lastModified: rawFile.lastModified || Date.now()
+        });
+      }
+      return rawFile;
+    }
+
+    const htmlText = clipboardData.getData ? clipboardData.getData('text/html') : '';
+    const plainText = clipboardData.getData ? clipboardData.getData('text/plain') : '';
+    return this.extractDataUrlFromHtmlOrText(htmlText, plainText);
+  }
+
+  async pasteImageFromClipboardApi() {
+    if (!navigator.clipboard || typeof navigator.clipboard.read !== 'function') {
+      this.showOverlayToast('当前环境不支持按钮读取剪贴板，请直接按 Ctrl+V (或 Cmd+V) 粘贴图片');
+      return;
+    }
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+      for (const item of clipboardItems) {
+        const imageType = item.types.find((t) => t.startsWith('image/'));
+        if (imageType) {
+          const blob = await item.getType(imageType);
+          const file = new File([blob], this.buildPastedImageName(imageType), { type: imageType });
+          this.importOpticalImageFile(file, '粘贴');
+          return;
+        }
+        const htmlText = item.types.includes('text/html') ? await (await item.getType('text/html')).text() : '';
+        const plainText = item.types.includes('text/plain') ? await (await item.getType('text/plain')).text() : '';
+        const dataUrlFile = this.extractDataUrlFromHtmlOrText(htmlText, plainText);
+        if (dataUrlFile) {
+          this.importOpticalImageFile(dataUrlFile, '粘贴');
+          return;
+        }
+      }
+      this.showOverlayToast('剪贴板中未检测到图片，请先截图或复制光学照片后再粘贴');
+    } catch {
+      this.showOverlayToast('无法读取剪贴板权限，请直接按 Ctrl+V (或 Cmd+V) 粘贴图片');
+    }
+  }
+
+  updateEmptyWorkspaceVisibility() {
+    const empty = document.getElementById('emptyWorkspaceState');
+    if (!empty) return;
+    const hasData = Array.isArray(this.currentRawPoints) && this.currentRawPoints.length > 0;
+    // 在「样品叠加」视图下允许先粘贴/导入光学显微图，不遮挡画布工作区
+    empty.style.display = (!hasData && this.activeView !== 'overlay') ? 'flex' : 'none';
+  }
+
+  updateOverlayEmptyPrompt(state = null) {
+    const promptEl = document.getElementById('overlayEmptyPrompt');
+    if (!promptEl) return;
+    const hasImage = state ? state.hasImage : Boolean(this.overlayManager?.image);
+    const hasPolarData = state ? state.hasPolarData : Boolean(this.overlayManager?.polarData);
+    promptEl.style.display = (!hasImage && !hasPolarData) ? 'flex' : 'none';
+  }
+
   bindOverlayEvents() {
+    if (this.overlayManager) {
+      this.overlayManager.onImageDropped = (file) => this.importOpticalImageFile(file, '拖入');
+      this.overlayManager.onRenderStateChange = (state) => this.updateOverlayEmptyPrompt(state);
+    }
+
     // 1. 光学图片导入与清除 (主舞台浮动栏)
     const overlayImgInput = document.getElementById('overlayImageInput');
     if (overlayImgInput) {
       overlayImgInput.addEventListener('change', (e) => {
         if (e.target.files && e.target.files[0]) {
-          this.overlayManager?.loadImageFromFile(e.target.files[0]);
-          this.switchToView('overlay');
-          this.showOverlayToast(`已导入光学照片: ${e.target.files[0].name}，已对准样品微区`);
+          this.importOpticalImageFile(e.target.files[0], '导入');
           e.target.value = '';
         }
+      });
+    }
+
+    // 1.0 支持全局 Ctrl+V / Cmd+V 粘贴光学图片，以及按钮触发剪贴板读取
+    document.addEventListener('paste', (e) => {
+      const clipboardData = e.clipboardData;
+      if (!clipboardData) return;
+
+      const imageFile = this.extractImageFileFromClipboard(clipboardData);
+      if (!imageFile) return;
+
+      // 若焦点位于文本输入区或数据表格且剪贴板同时包含纯文本（如 Excel 复制），保留文本粘贴
+      const activeEl = (document.activeElement && document.activeElement !== document.body)
+        ? document.activeElement
+        : (e.target instanceof Element ? e.target : null);
+      const isTextEditable = Boolean(
+        activeEl && (
+          activeEl.tagName === 'TEXTAREA' ||
+          (activeEl.tagName === 'INPUT' && !['button', 'submit', 'reset', 'checkbox', 'radio', 'file', 'range', 'color'].includes((activeEl.type || '').toLowerCase())) ||
+          activeEl.isContentEditable ||
+          activeEl.closest?.('#dataTableContainer')
+        )
+      );
+      const hasPlainText = Boolean(clipboardData.getData('text/plain')?.trim());
+      if (isTextEditable && hasPlainText) return;
+
+      e.preventDefault();
+      this.importOpticalImageFile(imageFile, '粘贴');
+    });
+
+    const btnOverlayPaste = document.getElementById('btnOverlayPasteImg');
+    if (btnOverlayPaste) {
+      btnOverlayPaste.addEventListener('click', () => this.pasteImageFromClipboardApi());
+    }
+
+    const btnStep1Paste = document.getElementById('btnStep1PasteImg');
+    if (btnStep1Paste) {
+      btnStep1Paste.addEventListener('click', () => this.pasteImageFromClipboardApi());
+    }
+
+    const btnEmptyOverlayPaste = document.getElementById('btnEmptyOverlayPaste');
+    if (btnEmptyOverlayPaste) {
+      btnEmptyOverlayPaste.addEventListener('click', () => this.pasteImageFromClipboardApi());
+    }
+
+    const btnEmptyOverlaySample = document.getElementById('btnEmptyOverlaySample');
+    if (btnEmptyOverlaySample) {
+      btnEmptyOverlaySample.addEventListener('click', () => {
+        const presetKey = document.getElementById('presetSelector')?.value || this.currentPresetKey || 'real_pol';
+        this.overlayManager?.loadPresetBundle(presetKey, null, true);
+        this.showOverlayToast('已载入预设显微光学底图');
       });
     }
 
@@ -562,22 +790,34 @@ class PolarizationApp {
         e.preventDefault();
         step1UploadZone.classList.remove('dragover');
         if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-          this.overlayManager?.loadImageFromFile(e.dataTransfer.files[0]);
-          this.switchToView('overlay');
-          this.showOverlayToast(`已导入光学照片: ${e.dataTransfer.files[0].name}，已自动切换至叠加视图`);
+          this.importOpticalImageFile(e.dataTransfer.files[0], '导入');
         }
       });
       step1FileInput.addEventListener('change', (e) => {
         if (e.target.files && e.target.files[0]) {
-          this.overlayManager?.loadImageFromFile(e.target.files[0]);
-          this.switchToView('overlay');
-          this.showOverlayToast(`已导入光学照片: ${e.target.files[0].name}，已自动切换至叠加视图`);
+          this.importOpticalImageFile(e.target.files[0], '导入');
           e.target.value = '';
         }
       });
     }
 
-    // 步骤 1 预览卡片直达主视图与更换照片
+    // 步骤 1 预览卡片支持直接拖入新图片替换、直达主视图与更换照片
+    const step1PreviewCard = document.getElementById('step1OptPreviewCard');
+    if (step1PreviewCard) {
+      step1PreviewCard.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        step1PreviewCard.classList.add('dragover');
+      });
+      step1PreviewCard.addEventListener('dragleave', () => step1PreviewCard.classList.remove('dragover'));
+      step1PreviewCard.addEventListener('drop', (e) => {
+        e.preventDefault();
+        step1PreviewCard.classList.remove('dragover');
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+          this.importOpticalImageFile(e.dataTransfer.files[0], '导入');
+        }
+      });
+    }
+
     const btnStep1View = document.getElementById('btnStep1ViewOverlay');
     if (btnStep1View) {
       btnStep1View.addEventListener('click', () => {
@@ -711,65 +951,270 @@ class PolarizationApp {
       });
     }
 
-    // 1.3 快捷旋转对齐晶棱控制器 (滑移模块、直接输入角度与步进微调)
+    // 1.3 快捷旋转对齐晶棱控制器 (一步步微调、长按连发、滑移拖拽、直接输入、滚轮与快捷对齐助手)
     const quickRotSlider = document.getElementById('overlayQuickRotSlider');
     const quickRotInput = document.getElementById('overlayQuickRotInput');
+    const rotFineBox = document.getElementById('overlayRotFineBox');
+    const rotStepSelect = document.getElementById('overlayRotStepSelect');
+    const btnRotStepDec = document.getElementById('btnOverlayRotStepDec');
+    const btnRotStepInc = document.getElementById('btnOverlayRotStepInc');
+    const btnRotMore = document.getElementById('btnOverlayRotMore');
+    const rotPopover = document.getElementById('overlayRotPopover');
+    const btnCloseRotPopover = document.getElementById('btnCloseRotPopover');
+    const btnRotAlignFast = document.getElementById('btnOverlayRotAlignFast');
+    const btnRotOrtho = document.getElementById('btnOverlayRotOrtho');
+    const btnRotUndo = document.getElementById('btnOverlayRotUndo');
+    const chkRotSnap = document.getElementById('chkOverlayRotSnap');
 
-    const handleRotationChange = (rawVal) => {
-      let val = parseFloat(rawVal);
+    const getRotStep = () => (this.overlayManager?.rotationStep || 1);
+
+    const setRotStep = (rawStep, { silent = false } = {}) => {
+      const step = parseFloat(rawStep);
+      if (!Number.isFinite(step) || step <= 0) return;
+      this.overlayManager?.setRotationStep(step);
+      if (rotStepSelect && parseFloat(rotStepSelect.value) !== step) {
+        rotStepSelect.value = String(step);
+      }
+      if (quickRotSlider) {
+        quickRotSlider.step = String(step <= 1 ? step : (step === 5 ? 1 : 5));
+      }
+      document.querySelectorAll('#rotStepPillRow [data-rot-step]').forEach((btn) => {
+        const isMatch = parseFloat(btn.dataset.rotStep) === step;
+        btn.classList.toggle('active', isMatch);
+        btn.setAttribute('aria-pressed', isMatch ? 'true' : 'false');
+      });
+      const stepLabel = Number.isInteger(step) ? `${step}°` : `${step.toFixed(1)}°`;
+      if (btnRotStepDec) btnRotStepDec.title = `逆时针微调 ${stepLabel} (支持长按连续调整，快捷键 [ )`;
+      if (btnRotStepInc) btnRotStepInc.title = `顺时针微调 ${stepLabel} (支持长按连续调整，快捷键 ] )`;
+      if (!silent) {
+        this.showOverlayLiveHud(`微调步长已切换为 ${stepLabel}`);
+      }
+    };
+    this.setOverlayRotationStep = setRotStep;
+
+    // 通用长按连续步进绑定器 (同时完全兼容键盘触发与编程式 .click())
+    const bindHoldStepper = (btn, getDelta) => {
+      if (!btn) return;
+      let startTimer = null;
+      let repeatTimer = null;
+      let startedAt = 0;
+      let handledPointer = false;
+
+      const clearHold = () => {
+        if (startTimer) { clearTimeout(startTimer); startTimer = null; }
+        if (repeatTimer) { clearTimeout(repeatTimer); repeatTimer = null; }
+      };
+
+      const scheduleNext = () => {
+        const elapsed = Date.now() - startedAt;
+        const interval = elapsed > 1200 ? 35 : 70;
+        repeatTimer = setTimeout(() => {
+          this.overlayManager?.stepRotation(getDelta(), { recordHistory: false });
+          scheduleNext();
+        }, interval);
+      };
+
+      btn.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        handledPointer = true;
+        startedAt = Date.now();
+        this.overlayManager?.stepRotation(getDelta());
+        clearHold();
+        startTimer = setTimeout(() => {
+          scheduleNext();
+        }, 320);
+      });
+
+      ['pointerup', 'pointerleave', 'pointercancel', 'blur'].forEach((evt) => {
+        btn.addEventListener(evt, clearHold);
+      });
+
+      btn.addEventListener('click', () => {
+        if (handledPointer) {
+          handledPointer = false;
+          return;
+        }
+        this.overlayManager?.stepRotation(getDelta());
+      });
+    };
+
+    const handleRotationChange = (rawVal, opts = {}) => {
+      const val = parseFloat(rawVal);
       if (!Number.isFinite(val)) return;
-      while (val > 180) val -= 360;
-      while (val < -180) val += 360;
-      val = Math.round(val);
-
-      if (quickRotSlider && parseInt(quickRotSlider.value, 10) !== val) {
-        quickRotSlider.value = val;
-      }
-      if (quickRotInput && document.activeElement !== quickRotInput && parseFloat(quickRotInput.value) !== val) {
-        quickRotInput.value = val;
-      }
-      this.overlayManager?.setRotation(val);
+      this.overlayManager?.setRotation(val, opts);
     };
 
     if (quickRotSlider) {
+      let sliderStartRot = null;
+      quickRotSlider.addEventListener('pointerdown', () => {
+        sliderStartRot = this.overlayManager?.overlayConfig?.rotation ?? 0;
+      });
       quickRotSlider.addEventListener('input', (e) => {
-        handleRotationChange(e.target.value);
+        handleRotationChange(e.target.value, { allowSnap: true, recordHistory: false });
+      });
+      quickRotSlider.addEventListener('change', (e) => {
+        if (sliderStartRot !== null && this.overlayManager) {
+          if (this.overlayManager.normalizeRotation(sliderStartRot) !== this.overlayManager.normalizeRotation(this.overlayManager.overlayConfig.rotation)) {
+            this.overlayManager.recordRotationHistory(sliderStartRot);
+          }
+          sliderStartRot = null;
+        }
+        handleRotationChange(e.target.value, { allowSnap: true, recordHistory: false });
+      });
+      quickRotSlider.addEventListener('dblclick', () => {
+        this.overlayManager?.setRotation(0, { feedbackPrefix: '已归零' });
       });
     }
 
     if (quickRotInput) {
+      let inputFocusPrev = 0;
+      quickRotInput.addEventListener('focus', () => {
+        inputFocusPrev = this.overlayManager?.overlayConfig?.rotation ?? 0;
+        quickRotInput.select();
+      });
       quickRotInput.addEventListener('input', (e) => {
         const val = parseFloat(e.target.value);
         if (Number.isFinite(val)) {
-          this.overlayManager?.setRotation(val);
+          this.overlayManager?.setRotation(val, { recordHistory: false });
         }
       });
       quickRotInput.addEventListener('change', (e) => {
-        handleRotationChange(e.target.value);
+        const val = parseFloat(e.target.value);
+        if (Number.isFinite(val)) {
+          handleRotationChange(val, { recordHistory: true });
+        } else {
+          this.syncOverlayControls(this.overlayManager?.overlayConfig);
+        }
       });
       quickRotInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
           e.preventDefault();
-          handleRotationChange(e.target.value);
+          const dir = e.key === 'ArrowUp' ? 1 : -1;
+          const base = e.altKey ? 0.1 : getRotStep();
+          const delta = e.shiftKey ? base * 5 : base;
+          this.overlayManager?.stepRotation(dir * delta);
+          quickRotInput.value = this.overlayManager?.overlayConfig?.rotation ?? 0;
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          handleRotationChange(e.target.value, { recordHistory: true });
+          quickRotInput.blur();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          this.overlayManager?.setRotation(inputFocusPrev, { recordHistory: false, feedbackPrefix: '已还原' });
           quickRotInput.blur();
         }
       });
     }
 
+    // 悬停输入框组合盒滚动滚轮即可按当前步长一步步调谐
+    if (rotFineBox) {
+      rotFineBox.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const dir = e.deltaY < 0 ? 1 : -1;
+        const base = e.altKey ? 0.1 : getRotStep();
+        const delta = e.shiftKey ? base * 5 : base;
+        this.overlayManager?.stepRotation(dir * delta);
+      }, { passive: false });
+    }
+
+    if (rotStepSelect) {
+      rotStepSelect.addEventListener('change', (e) => {
+        setRotStep(e.target.value);
+      });
+      setRotStep(rotStepSelect.value || 1, { silent: true });
+    }
+
+    bindHoldStepper(btnRotStepDec, () => -getRotStep());
+    bindHoldStepper(btnRotStepInc, () => getRotStep());
+
     const btnRotM5 = document.getElementById('btnOverlayRotM5');
-    if (btnRotM5) btnRotM5.addEventListener('click', () => this.overlayManager?.stepRotation(-5));
+    bindHoldStepper(btnRotM5, () => -5);
 
     const btnRotM1 = document.getElementById('btnOverlayRotM1');
-    if (btnRotM1) btnRotM1.addEventListener('click', () => this.overlayManager?.stepRotation(-1));
+    bindHoldStepper(btnRotM1, () => -1);
 
     const btnRotReset = document.getElementById('btnOverlayRotReset');
-    if (btnRotReset) btnRotReset.addEventListener('click', () => this.overlayManager?.setRotation(0));
+    if (btnRotReset) btnRotReset.addEventListener('click', () => this.overlayManager?.setRotation(0, { feedbackPrefix: '已归零' }));
 
     const btnRotP1 = document.getElementById('btnOverlayRotP1');
-    if (btnRotP1) btnRotP1.addEventListener('click', () => this.overlayManager?.stepRotation(1));
+    bindHoldStepper(btnRotP1, () => 1);
 
     const btnRotP5 = document.getElementById('btnOverlayRotP5');
-    if (btnRotP5) btnRotP5.addEventListener('click', () => this.overlayManager?.stepRotation(5));
+    bindHoldStepper(btnRotP5, () => 5);
+
+    // 角度精密调谐 Popover 开关与交互
+    const setRotPopoverOpen = (open, { restoreFocus = false } = {}) => {
+      if (!rotPopover || !btnRotMore) return;
+      rotPopover.style.display = open ? 'block' : 'none';
+      rotPopover.setAttribute('aria-hidden', open ? 'false' : 'true');
+      btnRotMore.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open) {
+        if (btnRotUndo) btnRotUndo.disabled = !(this.overlayManager?.rotationHistory?.length);
+        if (btnRotAlignFast) btnRotAlignFast.disabled = this.overlayManager?.getFitThetaMax() === null;
+      } else if (restoreFocus) {
+        btnRotMore.focus({ preventScroll: true });
+      }
+    };
+    this.setOverlayRotPopoverOpen = setRotPopoverOpen;
+
+    if (btnRotMore && rotPopover) {
+      btnRotMore.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setRotPopoverOpen(btnRotMore.getAttribute('aria-expanded') !== 'true');
+      });
+      document.addEventListener('click', (e) => {
+        if (btnRotMore.getAttribute('aria-expanded') !== 'true') return;
+        if (!rotPopover.contains(e.target) && !btnRotMore.contains(e.target)) {
+          setRotPopoverOpen(false);
+        }
+      });
+    }
+    if (btnCloseRotPopover) {
+      btnCloseRotPopover.addEventListener('click', () => setRotPopoverOpen(false, { restoreFocus: true }));
+    }
+
+    document.querySelectorAll('#rotStepPillRow [data-rot-step]').forEach((btn) => {
+      btn.addEventListener('click', () => setRotStep(btn.dataset.rotStep));
+    });
+
+    document.querySelectorAll('#overlayRotPopover [data-rot-preset]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const presetDeg = parseFloat(btn.dataset.rotPreset);
+        if (Number.isFinite(presetDeg)) {
+          this.overlayManager?.setRotation(presetDeg, { feedbackPrefix: '已跳转至' });
+        }
+      });
+    });
+
+    if (btnRotAlignFast) {
+      btnRotAlignFast.addEventListener('click', () => {
+        const aligned = this.overlayManager?.alignToFastAxis();
+        if (aligned === null) {
+          this.showOverlayToast('当前尚无可用拟合主轴 θmax 数据');
+        }
+      });
+    }
+
+    if (btnRotOrtho) {
+      btnRotOrtho.addEventListener('click', () => {
+        this.overlayManager?.stepRotation(90);
+      });
+    }
+
+    if (btnRotUndo) {
+      btnRotUndo.addEventListener('click', () => {
+        if (!this.overlayManager?.undoRotation()) {
+          this.showOverlayToast('暂无可撤销的角度记录');
+        }
+      });
+    }
+
+    if (chkRotSnap) {
+      chkRotSnap.addEventListener('change', (e) => {
+        this.overlayManager?.setRotationSnap(e.target.checked);
+        this.showOverlayLiveHud(e.target.checked ? '已开启 15° 角度刻度吸附' : '已关闭角度吸附 (自由精调)');
+      });
+    }
 
     // 1.4 HUD 抽屉面板展开/收起
     const btnToggleHud = document.getElementById('btnToggleOverlayHud');
@@ -948,10 +1393,18 @@ class PolarizationApp {
     const btnFInv = document.getElementById('btnHudFilterInvert');
     if (btnFInv) btnFInv.addEventListener('click', () => applyFilterMode('invert', btnFInv));
 
-    // 1.12 全局快捷键：F 全屏，R 对准微区
+    // 1.12 全局快捷键：F 全屏，R 对准微区，X/Y 镜像，[ / ] 逐步旋转，0 归零，Ctrl+Z 撤销角度
     window.addEventListener('keydown', (e) => {
       if (this.activeView !== 'overlay') return;
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+        if (this.overlayManager?.rotationHistory?.length) {
+          e.preventDefault();
+          this.overlayManager.undoRotation();
+        }
+        return;
+      }
+      if (e.ctrlKey || e.metaKey) return;
       if (e.key === 'f' || e.key === 'F') {
         e.preventDefault();
         btnFullscreen?.click();
@@ -966,8 +1419,21 @@ class PolarizationApp {
         e.preventDefault();
         const btnFlipY = document.getElementById('btnOverlayFlipY');
         btnFlipY?.click();
+      } else if (e.key === '[' || e.key === '{' || e.key === ']' || e.key === '}') {
+        if (document.activeElement === this.overlayManager?.canvas) return;
+        e.preventDefault();
+        const dir = (e.key === ']' || e.key === '}') ? 1 : -1;
+        const base = e.altKey ? 0.1 : (this.overlayManager?.rotationStep || 1);
+        const delta = e.shiftKey ? base * 5 : base;
+        this.overlayManager?.stepRotation(dir * delta);
+      } else if (e.key === '0') {
+        if (document.activeElement === this.overlayManager?.canvas) return;
+        e.preventDefault();
+        this.overlayManager?.setRotation(0, { feedbackPrefix: '已归零' });
       } else if (e.key === 'Escape') {
-        if (btnToggleHud?.getAttribute('aria-expanded') === 'true') {
+        if (btnRotMore?.getAttribute('aria-expanded') === 'true') {
+          this.setOverlayRotPopoverOpen?.(false, { restoreFocus: true });
+        } else if (btnToggleHud?.getAttribute('aria-expanded') === 'true') {
           this.setOverlayHudOpen?.(false, { restoreFocus: true });
         } else if (overlayCard?.classList.contains('is-fullscreen')) {
           btnFullscreen?.click();
@@ -1028,12 +1494,9 @@ class PolarizationApp {
     const rot = document.getElementById('overlayRotation');
     if (rot) {
       rot.addEventListener('input', (e) => {
-        const val = parseInt(e.target.value, 10);
-        const label = document.getElementById('overlayRotationVal');
-        if (label) label.textContent = `${val}°`;
-        const quickRot = document.getElementById('overlayQuickRotLabel');
-        if (quickRot) quickRot.textContent = `${val}°`;
-        this.overlayManager?.updateConfig({ rotation: val });
+        const val = parseFloat(e.target.value);
+        if (!Number.isFinite(val)) return;
+        this.overlayManager?.setRotation(val, { recordHistory: false });
       });
     }
 
@@ -1138,15 +1601,28 @@ class PolarizationApp {
     const quickRotLabel = document.getElementById('overlayQuickRotLabel');
     const quickRotSlider = document.getElementById('overlayQuickRotSlider');
     const quickRotInput = document.getElementById('overlayQuickRotInput');
+    const btnRotUndo = document.getElementById('btnOverlayRotUndo');
     if (cfg.rotation !== undefined) {
-      const rot = Math.round(cfg.rotation);
-      if (rotEl && parseInt(rotEl.value, 10) !== rot) rotEl.value = rot;
-      if (rotVal) rotVal.textContent = `${rot}°`;
-      if (quickRotLabel) quickRotLabel.textContent = `${rot}°`;
-      if (quickRotSlider && parseInt(quickRotSlider.value, 10) !== rot) quickRotSlider.value = rot;
+      const rot = this.overlayManager?.normalizeRotation
+        ? this.overlayManager.normalizeRotation(cfg.rotation)
+        : Math.round(cfg.rotation * 10) / 10;
+      const rotText = this.overlayManager?.formatRotation
+        ? this.overlayManager.formatRotation(rot)
+        : `${rot}°`;
+      if (rotEl && parseFloat(rotEl.value) !== rot) rotEl.value = rot;
+      if (rotVal) rotVal.textContent = rotText;
+      if (quickRotLabel) quickRotLabel.textContent = rotText;
+      if (quickRotSlider && parseFloat(quickRotSlider.value) !== rot) quickRotSlider.value = rot;
       if (quickRotInput && document.activeElement !== quickRotInput && parseFloat(quickRotInput.value) !== rot) {
         quickRotInput.value = rot;
       }
+      if (btnRotUndo) {
+        btnRotUndo.disabled = !(this.overlayManager?.rotationHistory?.length);
+      }
+      document.querySelectorAll('#overlayRotPopover [data-rot-preset]').forEach((btn) => {
+        const isMatch = parseFloat(btn.dataset.rotPreset) === rot;
+        btn.classList.toggle('active', isMatch);
+      });
     }
     const opEl = document.getElementById('overlayOpacity');
     const opVal = document.getElementById('overlayOpacityVal');
@@ -1467,8 +1943,7 @@ class PolarizationApp {
       this.setExportAvailability(false);
       if (this.chartManager) this.chartManager.clearCharts();
       if (this.overlayManager) this.overlayManager.setData(null);
-      const empty = document.getElementById('emptyWorkspaceState');
-      if (empty) empty.style.display = 'flex';
+      this.updateEmptyWorkspaceVisibility();
       return;
     }
 
@@ -1628,8 +2103,7 @@ class PolarizationApp {
       }
       if (qualityAudit.claimLevel === 'blocked') this.setBlockedDerivedDisplays();
       this.setExportAvailability(true, Boolean(stats));
-      const empty = document.getElementById('emptyWorkspaceState');
-      if (empty) empty.style.display = 'none';
+      this.updateEmptyWorkspaceVisibility();
     } catch (err) {
       console.error('数据处理管道异常:', err);
     }
@@ -1713,7 +2187,7 @@ class PolarizationApp {
     try {
       return typeof chrome !== 'undefined' && chrome.runtime?.getManifest ? chrome.runtime.getManifest().version : '3.1.6';
     } catch (e) {
-      return '3.1.6';
+      return '3.1.7';
     }
   }
 

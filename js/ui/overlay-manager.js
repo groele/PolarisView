@@ -51,6 +51,7 @@ class PolarOverlayManager {
 
     // 交互拖拽、旋转与单点吸附状态
     this.isDragging = false;
+    this.isSnapPending = false;
     this.isRotating = false;
     this.rotateStartAngle = 0;
     this.rotateStartRot = 0;
@@ -70,9 +71,18 @@ class PolarOverlayManager {
     this.panStartImgX = 0;
     this.panStartImgY = 0;
 
+    // 角度精密调谐状态 (支持 0.1° 亚度步进、角度吸附与撤销栈)
+    this.rotationStep = 1;
+    this.rotationSnap = false;
+    this.rotationSnapAngle = 15;
+    this.rotationHistory = [];
+    this._rotGuideUntil = 0;
+    this._rotGuideTimer = null;
+
     // 回调通知
     this.onConfigChange = null;
     this.onImageLoaded = null;
+    this.onHudFeedback = null;
 
     this.initCanvasEvents();
     const container = this.canvas?.parentElement;
@@ -138,21 +148,116 @@ class PolarOverlayManager {
     return palettes[theme] || palettes.nature;
   }
 
-  stepRotation(delta) {
-    let newRot = Math.round((this.overlayConfig.rotation || 0) + delta);
-    while (newRot > 180) newRot -= 360;
-    while (newRot < -180) newRot += 360;
-    this.overlayConfig.rotation = newRot;
+  normalizeRotation(angle) {
+    let val = Number(angle);
+    if (!Number.isFinite(val)) return 0;
+    val = Math.round(val * 10) / 10;
+    while (val > 180) val = Math.round((val - 360) * 10) / 10;
+    while (val <= -180) val = Math.round((val + 360) * 10) / 10;
+    if (Object.is(val, -0) || val === 0) val = 0;
+    return val;
+  }
+
+  formatRotation(angle) {
+    const val = this.normalizeRotation(angle);
+    return Number.isInteger(val) ? `${val}°` : `${val.toFixed(1)}°`;
+  }
+
+  setRotationStep(step) {
+    const num = Number(step);
+    if (!Number.isFinite(num) || num <= 0) return;
+    this.rotationStep = Math.round(num * 10) / 10;
+  }
+
+  setRotationSnap(enabled) {
+    this.rotationSnap = Boolean(enabled);
+  }
+
+  recordRotationHistory(prevAngle) {
+    if (!Array.isArray(this.rotationHistory)) this.rotationHistory = [];
+    const normalized = this.normalizeRotation(prevAngle);
+    const last = this.rotationHistory[this.rotationHistory.length - 1];
+    if (last === normalized) return;
+    this.rotationHistory.push(normalized);
+    if (this.rotationHistory.length > 30) {
+      this.rotationHistory.shift();
+    }
+  }
+
+  undoRotation() {
+    if (!Array.isArray(this.rotationHistory) || !this.rotationHistory.length) return false;
+    const prev = this.rotationHistory.pop();
+    this.setRotation(prev, { recordHistory: false, showGuide: true, feedbackPrefix: '已撤销至' });
+    return true;
+  }
+
+  getFitThetaMax() {
+    const reportable = this.polarData?.qualityAudit
+      ? this.polarData.qualityAudit.claimLevel !== 'blocked'
+      : (this.polarData?.isReportable !== false);
+    if (!reportable) return null;
+    const p = this.polarData?.fitResult?.params || this.polarData?.polarFit?.params;
+    const rawTheta0 = p?.thetaMax ?? p?.theta0 ?? p?.theta0Deg;
+    const numTheta = parseFloat(rawTheta0);
+    return Number.isFinite(numTheta) ? this.normalizeRotation(numTheta) : null;
+  }
+
+  alignToFastAxis() {
+    const thetaMax = this.getFitThetaMax();
+    if (thetaMax === null) return null;
+    this.setRotation(thetaMax, { recordHistory: true, showGuide: true, feedbackPrefix: '已对齐主轴 θmax' });
+    return thetaMax;
+  }
+
+  triggerRotationGuide(durationMs = 1100) {
+    this._rotGuideUntil = Date.now() + durationMs;
+    if (this._rotGuideTimer) clearTimeout(this._rotGuideTimer);
+    this._rotGuideTimer = setTimeout(() => {
+      this._rotGuideTimer = null;
+      if (!this.isRotating) {
+        this.requestRender();
+      }
+    }, durationMs + 30);
+  }
+
+  stepRotation(delta, opts = {}) {
+    const prev = this.normalizeRotation(this.overlayConfig.rotation || 0);
+    const next = this.normalizeRotation(prev + delta);
+    if (opts.recordHistory !== false && next !== prev) {
+      this.recordRotationHistory(prev);
+    }
+    this.overlayConfig.rotation = next;
+    if (opts.showGuide !== false) {
+      this.triggerRotationGuide();
+    }
     if (this.onConfigChange) this.onConfigChange(this.overlayConfig);
+    if (this.onHudFeedback && opts.silent !== true) {
+      const sign = delta > 0 ? `+${Number.isInteger(delta) ? delta : Number(delta.toFixed(1))}°` : `${Number.isInteger(delta) ? delta : Number(delta.toFixed(1))}°`;
+      this.onHudFeedback(`对齐偏角 ${this.formatRotation(next)} (${sign})`);
+    }
     this.requestRender();
   }
 
-  setRotation(angle) {
-    let newRot = Math.round(angle);
-    while (newRot > 180) newRot -= 360;
-    while (newRot < -180) newRot += 360;
+  setRotation(angle, opts = {}) {
+    const prev = this.normalizeRotation(this.overlayConfig.rotation || 0);
+    let target = Number(angle);
+    if (!Number.isFinite(target)) return;
+    if (opts.allowSnap && this.rotationSnap && this.rotationSnapAngle > 0) {
+      target = Math.round(target / this.rotationSnapAngle) * this.rotationSnapAngle;
+    }
+    const newRot = this.normalizeRotation(target);
+    if (opts.recordHistory !== false && newRot !== prev) {
+      this.recordRotationHistory(prev);
+    }
     this.overlayConfig.rotation = newRot;
+    if (opts.showGuide !== false) {
+      this.triggerRotationGuide();
+    }
     if (this.onConfigChange) this.onConfigChange(this.overlayConfig);
+    if (this.onHudFeedback && opts.silent !== true) {
+      const prefix = opts.feedbackPrefix || '对齐偏角';
+      this.onHudFeedback(`${prefix} ${this.formatRotation(newRot)}`);
+    }
     this.requestRender();
   }
 
@@ -170,23 +275,26 @@ class PolarOverlayManager {
     window.addEventListener('mousemove', (e) => this.handleMouseMove(e));
     window.addEventListener('mouseup', (e) => this.handleMouseUp(e));
 
-    // 滚轮缩放：Ctrl+滚轮缩放底图，Shift+滚轮旋转极坐标，默认滚轮缩放极坐标
+    // 滚轮缩放：Ctrl+滚轮缩放底图，Shift+滚轮按当前步长旋转极坐标（Alt+Shift 为 0.1° 精调），默认滚轮缩放极坐标
     this.canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
       if (this.image && e.ctrlKey) {
         // Ctrl + 滚轮平滑缩放底图
         const zoomDelta = e.deltaY < 0 ? 0.05 : -0.05;
         this.imageZoom = Math.max(0.1, Math.min(6.0, parseFloat(((this.imageZoom || 1.0) + zoomDelta).toFixed(3))));
+        if (this.onHudFeedback) this.onHudFeedback(`底图缩放 ${Math.round(this.imageZoom * 100)}%`);
         this.requestRender();
       } else if (e.shiftKey) {
-        // Shift + 滚轮平滑旋转对齐晶棱
-        const rotDelta = e.deltaY < 0 ? 1 : -1;
+        // Shift + 滚轮按当前选定步长平滑旋转对齐晶棱
+        const step = e.altKey ? 0.1 : (this.rotationStep || 1);
+        const rotDelta = e.deltaY < 0 ? step : -step;
         this.stepRotation(rotDelta);
       } else {
         const delta = e.deltaY < 0 ? 0.03 : -0.03;
         const newScale = Math.max(0.1, Math.min(1.5, this.overlayConfig.scale + delta));
         this.overlayConfig.scale = parseFloat(newScale.toFixed(3));
         if (this.onConfigChange) this.onConfigChange(this.overlayConfig);
+        if (this.onHudFeedback) this.onHudFeedback(`极坐标尺寸 ${Math.round(this.overlayConfig.scale * 100)}%`);
         this.requestRender();
       }
     }, { passive: false });
@@ -205,7 +313,11 @@ class PolarOverlayManager {
         e.preventDefault();
         container.classList.remove('drag-over');
         if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-          this.loadImageFromFile(e.dataTransfer.files[0]);
+          if (this.onImageDropped) {
+            this.onImageDropped(e.dataTransfer.files[0]);
+          } else {
+            this.loadImageFromFile(e.dataTransfer.files[0]);
+          }
         }
       });
     }
@@ -240,7 +352,23 @@ class PolarOverlayManager {
       const nextScale = Math.max(0.1, Math.min(1.5, this.overlayConfig.scale + direction * 0.02));
       this.overlayConfig.scale = parseFloat(nextScale.toFixed(3));
       if (this.onConfigChange) this.onConfigChange(this.overlayConfig);
+      if (this.onHudFeedback) this.onHudFeedback(`极坐标尺寸 ${Math.round(this.overlayConfig.scale * 100)}%`);
       this.requestRender();
+      return;
+    }
+
+    if (e.key === '[' || e.key === '{' || e.key === ']' || e.key === '}') {
+      e.preventDefault();
+      const dir = (e.key === ']' || e.key === '}') ? 1 : -1;
+      const baseStep = e.altKey ? 0.1 : (this.rotationStep || 1);
+      const step = e.shiftKey ? baseStep * 5 : baseStep;
+      this.stepRotation(dir * step);
+      return;
+    }
+
+    if (e.key === '0') {
+      e.preventDefault();
+      this.setRotation(0, { feedbackPrefix: '已归零' });
     }
   }
 
@@ -343,15 +471,26 @@ class PolarOverlayManager {
       return;
     }
 
-    // 3. 普通左键：拖动极坐标图或点击吸附定位
+    // 3. 普通左键：仅在点击极坐标区域时允许拖拽平移；Shift+单击用于吸附定位
     if (e.button === 0) {
-      this.isDragging = true;
-      this.dragStartX = e.clientX;
-      this.dragStartY = e.clientY;
-      this.dragStartOffsetX = this.overlayConfig.offsetX;
-      this.dragStartOffsetY = this.overlayConfig.offsetY;
-      this.hasDraggedMeaningfully = false;
-      this.canvas.style.cursor = 'grabbing';
+      if (e.shiftKey) {
+        this.isSnapPending = true;
+        this.dragStartX = e.clientX;
+        this.dragStartY = e.clientY;
+        this.hasDraggedMeaningfully = false;
+        return;
+      }
+      const dist = Math.hypot(mouseX - centerX, mouseY - centerY);
+      const polarRadius = Math.min(this.canvas.width, this.canvas.height) * this.overlayConfig.scale;
+      if (dist <= polarRadius * 1.15) {
+        this.isDragging = true;
+        this.dragStartX = e.clientX;
+        this.dragStartY = e.clientY;
+        this.dragStartOffsetX = this.overlayConfig.offsetX;
+        this.dragStartOffsetY = this.overlayConfig.offsetY;
+        this.hasDraggedMeaningfully = false;
+        this.canvas.style.cursor = 'grabbing';
+      }
     }
   }
 
@@ -382,11 +521,17 @@ class PolarOverlayManager {
     if (this.isRotating) {
       const currentAngle = Math.atan2(mouseY - centerY, mouseX - centerX);
       const diffDeg = ((currentAngle - this.rotateStartAngle) * 180) / Math.PI;
-      let newRot = Math.round(this.rotateStartRot - diffDeg);
-      while (newRot > 180) newRot -= 360;
-      while (newRot < -180) newRot += 360;
+      let target = this.rotateStartRot - diffDeg;
+      if ((this.rotationSnap || e.shiftKey) && this.rotationSnapAngle > 0) {
+        target = Math.round(target / this.rotationSnapAngle) * this.rotationSnapAngle;
+      }
+      const newRot = this.normalizeRotation(target);
       this.overlayConfig.rotation = newRot;
       if (this.onConfigChange) this.onConfigChange(this.overlayConfig);
+      if (this.onHudFeedback) {
+        const snapTag = (this.rotationSnap || e.shiftKey) ? ' · 15°吸附' : '';
+        this.onHudFeedback(`对齐偏角 ${this.formatRotation(newRot)}${snapTag}`);
+      }
       this.requestRender();
       return;
     }
@@ -397,19 +542,22 @@ class PolarOverlayManager {
         this.canvas.style.cursor = 'move';
       } else if (e.altKey) {
         this.canvas.style.cursor = 'alias';
+      } else if (e.shiftKey) {
+        this.canvas.style.cursor = 'crosshair';
       } else {
         const dist = Math.hypot(mouseX - centerX, mouseY - centerY);
         const polarRadius = Math.min(this.canvas.width, this.canvas.height) * this.overlayConfig.scale;
-        this.canvas.style.cursor = dist <= polarRadius * 1.15 ? 'grab' : 'crosshair';
+        this.canvas.style.cursor = dist <= polarRadius * 1.15 ? 'grab' : 'default';
       }
       return;
     }
 
-    // 4. 极坐标拖拽中
+    // 4. 极坐标拖拽中（超过 4px 阈值才真正触发位移，避免普通点击抖动误移）
     const dx = (e.clientX - this.dragStartX) * scaleFactorX;
     const dy = (e.clientY - this.dragStartY) * scaleFactorY;
 
-    if (Math.hypot(dx, dy) > 5) {
+    if (!this.hasDraggedMeaningfully) {
+      if (Math.hypot(dx, dy) <= 4) return;
       this.hasDraggedMeaningfully = true;
     }
 
@@ -430,14 +578,18 @@ class PolarOverlayManager {
 
     if (this.isRotating) {
       this.isRotating = false;
+      if (this.normalizeRotation(this.rotateStartRot) !== this.normalizeRotation(this.overlayConfig.rotation)) {
+        this.recordRotationHistory(this.rotateStartRot);
+      }
+      this.triggerRotationGuide(700);
       if (this.canvas) this.canvas.style.cursor = 'grab';
       this.render();
       return;
     }
 
-    if (this.isDragging) {
-      // 点选吸附定位 (Click-to-Locate):
-      if (!this.hasDraggedMeaningfully && e && this.canvas) {
+    if (this.isSnapPending) {
+      this.isSnapPending = false;
+      if (e && e.shiftKey && this.canvas) {
         const rect = this.canvas.getBoundingClientRect();
         const rw = rect.width || this.canvas.width || 800;
         const rh = rect.height || this.canvas.height || 600;
@@ -450,15 +602,21 @@ class PolarOverlayManager {
           const scaleFactorY = this.canvas.height / rh;
           const clickCanvasX = (e.clientX - rect.left) * scaleFactorX;
           const clickCanvasY = (e.clientY - rect.top) * scaleFactorY;
-          
           this.overlayConfig.offsetX = Math.round(clickCanvasX - this.canvas.width / 2);
           this.overlayConfig.offsetY = Math.round(clickCanvasY - this.canvas.height / 2);
           if (this.onConfigChange) this.onConfigChange(this.overlayConfig);
+          this.render();
         }
       }
+      return;
+    }
+
+    if (this.isDragging) {
+      const moved = this.hasDraggedMeaningfully;
       this.isDragging = false;
+      this.hasDraggedMeaningfully = false;
       if (this.canvas) this.canvas.style.cursor = 'grab';
-      this.render();
+      if (moved) this.render();
     }
   }
 
@@ -466,19 +624,20 @@ class PolarOverlayManager {
    * 从文件（File/Blob）载入光学图像
    */
   loadImageFromFile(file) {
-    if (!file) return;
+    if (!file) return false;
 
     const isImage = (file.type && file.type.startsWith('image/')) ||
       /\.(png|jpe?g|webp|bmp|gif|svg|tif|tiff)$/i.test(file.name || '');
 
     if (!isImage) {
       alert('请选择有效的图像文件 (支持 PNG, JPG, WebP, BMP 等格式)');
-      return;
+      return false;
     }
 
+    const fileName = file.name || 'pasted_optical_image.png';
     const reader = new FileReader();
     reader.onerror = () => {
-      console.error('读取图像文件失败:', file.name);
+      console.error('读取图像文件失败:', fileName);
       alert('读取图像文件失败，请检查文件权限或重试。');
     };
     reader.onload = (e) => {
@@ -486,7 +645,7 @@ class PolarOverlayManager {
       const img = new Image();
       img.onload = () => {
         this.image = img;
-        this.imageName = file.name;
+        this.imageName = fileName;
         this.isSampleImage = false;
         this.imagePanX = 0;
         this.imagePanY = 0;
@@ -496,15 +655,16 @@ class PolarOverlayManager {
         this.render();
         const w = img.naturalWidth || img.width || 1200;
         const h = img.naturalHeight || img.height || 900;
-        if (this.onImageLoaded) this.onImageLoaded(file.name, w, h, dataUrl);
+        if (this.onImageLoaded) this.onImageLoaded(fileName, w, h, dataUrl);
       };
       img.onerror = () => {
-        console.error('图像解码失败:', file.name);
-        alert(`无法解码图像文件 "${file.name}"。\n如果该文件为 TIFF 或专业显微镜专有格式，请先另存为 PNG 或 JPG 格式后导入。`);
+        console.error('图像解码失败:', fileName);
+        alert(`无法解码图像文件 "${fileName}"。\n如果该文件为 TIFF 或专业显微镜专有格式，请先另存为 PNG 或 JPG 格式后导入。`);
       };
       img.src = dataUrl;
     };
     reader.readAsDataURL(file);
+    return true;
   }
 
   /**
@@ -993,6 +1153,11 @@ class PolarOverlayManager {
     // 3. 绘制极坐标图矢量图层 (无论有无底图，均完整高保真呈现)
     this.drawPolarPlot(ctx, centerX, centerY, radius);
 
+    // 3.5 屏幕交互时的旋转对齐辅助参考环 (不进入 4K 导出图片)
+    if ((!this._exportScale || this._exportScale === 1) && (this.isRotating || Date.now() < this._rotGuideUntil)) {
+      this.drawRotationGuide(ctx, centerX, centerY, radius);
+    }
+
     // 4. 绘制学术角标水印卡片（实时显示晶棱偏角、θmax、消光比、偏振度等）
     if (this.overlayConfig.showBadge) {
       this.drawAcademicBadge(ctx, width, height);
@@ -1001,22 +1166,43 @@ class PolarOverlayManager {
     // 绘制完成后再次显式复位滤镜与变换，杜绝污染外部管道与后续帧
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.filter = 'none';
+
+    if (this.onRenderStateChange && (!this._exportScale || this._exportScale === 1)) {
+      this.onRenderStateChange({
+        hasImage: Boolean(this.image),
+        hasPolarData: Boolean(this.polarData)
+      });
+    }
+  }
+
+  isUiDarkMode() {
+    if (typeof document !== 'undefined' && document.body) {
+      return document.body.getAttribute('data-theme') === 'dark';
+    }
+    return this.overlayConfig?.theme === 'dark_lab';
   }
 
   drawEmptyBackdrop(ctx, width, height) {
-    // 1. 深邃科研暗室微光渐变底色
+    const isDark = this.isUiDarkMode();
+
+    // 1. 主题自适应科研背景（默认浅色学术白底，暗色模式为科研暗室底色）
     const grad = ctx.createRadialGradient(
       width / 2, height / 2, Math.min(width, height) * 0.15,
       width / 2, height / 2, Math.max(width, height) * 0.8
     );
-    grad.addColorStop(0, '#0f172a');
-    grad.addColorStop(1, '#070b14');
+    if (isDark) {
+      grad.addColorStop(0, '#0f172a');
+      grad.addColorStop(1, '#070b14');
+    } else {
+      grad.addColorStop(0, '#ffffff');
+      grad.addColorStop(1, '#f1f5f9');
+    }
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, width, height);
 
-    // 2. 细腻光学坐标毫米标尺暗网格
+    // 2. 细腻光学坐标毫米标尺网格
     const gridSize = 40;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+    ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(148, 163, 184, 0.16)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (let x = 0; x < width; x += gridSize) {
@@ -1028,7 +1214,7 @@ class PolarOverlayManager {
     ctx.stroke();
 
     // 3. 次级精密点阵 (实验台氛围感)
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.fillStyle = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(100, 116, 139, 0.18)';
     const dotStep = 80;
     for (let x = dotStep / 2; x < width; x += dotStep) {
       for (let y = dotStep / 2; y < height; y += dotStep) {
@@ -1036,35 +1222,37 @@ class PolarOverlayManager {
       }
     }
 
-    // 4. 顶部柔和磨砂信息胶囊（告知科研工作者当前为极坐标优先呈现，可随时导入显微图）
-    ctx.save();
-    const bannerText = '✨ 极坐标图已优先呈现 · 点击下方「导入光学图」或将图片拖入画布即可叠加比对';
-    ctx.font = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    const textWidth = ctx.measureText(bannerText).width;
-    const pillW = textWidth + 36;
-    const pillH = 30;
-    const pillX = (width - pillW) / 2;
-    const pillY = 16;
-    const r = 15;
+    // 4. 已有极坐标数据时展示顶部柔和磨砂提示胶囊（位于工具栏下方，不与中央引导卡片重叠）
+    if (this.polarData && (!this._exportScale || this._exportScale === 1)) {
+      ctx.save();
+      const bannerText = '✨ 极坐标图已优先呈现 · 导入、拖入或 Ctrl+V 粘贴光学图即可叠加比对';
+      ctx.font = '12.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      const textWidth = ctx.measureText(bannerText).width;
+      const pillW = textWidth + 32;
+      const pillH = 28;
+      const pillX = (width - pillW) / 2;
+      const pillY = 88;
+      const r = 14;
 
-    ctx.fillStyle = 'rgba(30, 41, 59, 0.78)';
-    ctx.strokeStyle = 'rgba(56, 189, 248, 0.28)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(pillX + r, pillY);
-    ctx.arcTo(pillX + pillW, pillY, pillX + pillW, pillY + pillH, r);
-    ctx.arcTo(pillX + pillW, pillY + pillH, pillX, pillY + pillH, r);
-    ctx.arcTo(pillX, pillY + pillH, pillX, pillY, r);
-    ctx.arcTo(pillX, pillY, pillX + pillW, pillY, r);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
+      ctx.fillStyle = isDark ? 'rgba(30, 41, 59, 0.82)' : 'rgba(255, 255, 255, 0.9)';
+      ctx.strokeStyle = isDark ? 'rgba(56, 189, 248, 0.3)' : 'rgba(37, 99, 235, 0.22)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(pillX + r, pillY);
+      ctx.arcTo(pillX + pillW, pillY, pillX + pillW, pillY + pillH, r);
+      ctx.arcTo(pillX + pillW, pillY + pillH, pillX, pillY + pillH, r);
+      ctx.arcTo(pillX, pillY + pillH, pillX, pillY, r);
+      ctx.arcTo(pillX, pillY, pillX + pillW, pillY, r);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
 
-    ctx.fillStyle = '#cbd5e1';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(bannerText, width / 2, pillY + pillH / 2);
-    ctx.restore();
+      ctx.fillStyle = isDark ? '#cbd5e1' : '#334155';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(bannerText, width / 2, pillY + pillH / 2);
+      ctx.restore();
+    }
   }
 
   drawBackgroundImage(ctx, destWidth, destHeight) {
@@ -1232,6 +1420,67 @@ class PolarOverlayManager {
     ctx.restore();
   }
 
+  /**
+   * 屏幕交互用旋转参考辅助环：显示 0° 水平基准虚线、当前旋转偏移射线与扇形角度指示
+   */
+  drawRotationGuide(ctx, cx, cy, radius) {
+    if (radius <= 10) return;
+    const rot = this.normalizeRotation(this.overlayConfig.rotation || 0);
+    const rotRad = (rot * Math.PI) / 180;
+    const guideR = radius * 1.12;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+
+    // 外圈刻度参考环 (每 15° 一小刻度，每 45° 一主刻度)
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(0, 0, guideR, 0, Math.PI * 2);
+    ctx.stroke();
+
+    for (let deg = 0; deg < 360; deg += 15) {
+      const a = (deg * Math.PI) / 180;
+      const isMajor = deg % 45 === 0;
+      const tickLen = isMajor ? 8 : 4;
+      ctx.strokeStyle = isMajor ? 'rgba(56, 189, 248, 0.72)' : 'rgba(56, 189, 248, 0.35)';
+      ctx.lineWidth = isMajor ? 1.4 : 1;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * (guideR - tickLen), Math.sin(a) * (guideR - tickLen));
+      ctx.lineTo(Math.cos(a) * guideR, Math.sin(a) * guideR);
+      ctx.stroke();
+    }
+
+    // 0° 水平参考基准虚线
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.75)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(guideR + 10, 0);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 当前旋转偏角扇形弧与射线
+    if (rot !== 0) {
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.14)';
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, guideR * 0.55, 0, -rotRad, rot > 0);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(Math.cos(-rotRad) * (guideR + 10), Math.sin(-rotRad) * (guideR + 10));
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
   getRadialRange() {
     const { maxVal, minVal } = this.getDataExtrema();
     if (!this.overlayConfig.dynamicRange) {
@@ -1288,11 +1537,12 @@ class PolarOverlayManager {
 
   drawPolarGrid(ctx, radius, pal) {
     const isWhiteBg = this.overlayConfig.bgStyle === 'white';
-    const isDarkBg = this.overlayConfig.bgStyle === 'dark' || (!this.image && !isWhiteBg);
-    const gridColor = isWhiteBg
-      ? (pal.gridDark || 'rgba(15, 23, 42, 0.35)')
+    const isLightCanvas = isWhiteBg || (!this.image && !this.isUiDarkMode());
+    const isDarkBg = this.overlayConfig.bgStyle === 'dark' || (!this.image && this.isUiDarkMode() && !isWhiteBg);
+    const gridColor = isLightCanvas
+      ? (pal.gridDark || 'rgba(15, 23, 42, 0.24)')
       : (isDarkBg ? 'rgba(255, 255, 255, 0.35)' : 'rgba(255, 255, 255, 0.55)');
-    const textColor = isWhiteBg
+    const textColor = isLightCanvas
       ? (pal.textDark || '#0f172a')
       : (isDarkBg ? 'rgba(255, 255, 255, 0.8)' : 'rgba(255, 255, 255, 0.95)');
 
@@ -1322,8 +1572,8 @@ class PolarOverlayManager {
     // 主正交轴 (0°-180°, 90°-270°) 实线
     if (this.overlayConfig.showAxes) {
       ctx.lineWidth = 1.2;
-      ctx.strokeStyle = isWhiteBg
-        ? 'rgba(15, 23, 42, 0.65)'
+      ctx.strokeStyle = isLightCanvas
+        ? 'rgba(15, 23, 42, 0.45)'
         : (isDarkBg ? 'rgba(255, 255, 255, 0.6)' : 'rgba(255, 255, 255, 0.85)');
       ctx.beginPath();
       ctx.moveTo(-radius * 1.03, 0); ctx.lineTo(radius * 1.03, 0);
@@ -1336,9 +1586,9 @@ class PolarOverlayManager {
 
   drawAngleLabels(ctx, radius, pal) {
     ctx.save();
-    const isWhiteBg = this.overlayConfig.bgStyle === 'white';
-    ctx.fillStyle = isWhiteBg ? (pal.textDark || '#0f172a') : '#ffffff';
-    ctx.shadowColor = isWhiteBg ? 'rgba(255, 255, 255, 0.85)' : 'rgba(0,0,0,0.85)';
+    const isLightCanvas = this.overlayConfig.bgStyle === 'white' || (!this.image && !this.isUiDarkMode());
+    ctx.fillStyle = isLightCanvas ? (pal.textDark || '#0f172a') : '#ffffff';
+    ctx.shadowColor = isLightCanvas ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0,0,0,0.85)';
     ctx.shadowBlur = 4;
     ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
     ctx.textAlign = 'center';
@@ -1603,7 +1853,8 @@ class PolarOverlayManager {
       ? (Number.isFinite(numTheta) ? `${numTheta.toFixed(1)}°` : 'N/A')
       : '不可报告';
 
-    const rot = this.overlayConfig.rotation || 0;
+    const rot = this.normalizeRotation(this.overlayConfig.rotation || 0);
+    const rotText = this.formatRotation(rot);
     let deltaThetaText = '';
     if (reportable && Number.isFinite(numTheta)) {
       let delta = Math.abs(numTheta - rot) % 180;
@@ -1634,7 +1885,7 @@ class PolarOverlayManager {
 
     const line1Text = `🔬 ${sampleId}`;
     const r2Text = r2Val ? ` · R²: ${r2Val}` : '';
-    const line2Text = `Align: ${rot}°${deltaThetaText}${r2Text}`;
+    const line2Text = `Align: ${rotText}${deltaThetaText}${r2Text}`;
     const line3Text = `θmax: ${thetaStr}  |  ER: ${erStr}${erDBStr}`;
     const line4Text = !reportable
       ? `状态: 质量门已阻止结论 (仅诊断)${flipTag}`
@@ -1668,11 +1919,12 @@ class PolarOverlayManager {
       cardY = pad + 80;
     }
 
-    // 半透明磨砂玻璃胶囊卡片底板
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+    // 半透明磨砂玻璃胶囊卡片底板（默认浅色无底图时使用学术白卡，有底图或暗色模式使用高对比深色卡）
+    const useLightBadge = !this.image && !this.isUiDarkMode();
+    ctx.fillStyle = useLightBadge ? 'rgba(255, 255, 255, 0.94)' : 'rgba(15, 23, 42, 0.88)';
+    ctx.strokeStyle = useLightBadge ? 'rgba(148, 163, 184, 0.45)' : 'rgba(255, 255, 255, 0.22)';
     ctx.lineWidth = 1;
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+    ctx.shadowColor = useLightBadge ? 'rgba(15, 23, 42, 0.12)' : 'rgba(0, 0, 0, 0.55)';
     ctx.shadowBlur = 10;
 
     // 圆角矩形
@@ -1688,26 +1940,26 @@ class PolarOverlayManager {
     ctx.stroke();
     ctx.shadowBlur = 0;
 
-    ctx.fillStyle = '#f8fafc';
+    ctx.fillStyle = useLightBadge ? '#0f172a' : '#f8fafc';
     ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText(line1Text, cardX + 12, cardY + 20);
 
     ctx.font = '11px ui-monospace, Consolas, monospace';
-    ctx.fillStyle = '#94a3b8';
+    ctx.fillStyle = useLightBadge ? '#475569' : '#94a3b8';
     ctx.fillText(line2Text, cardX + 12, cardY + 38);
 
-    ctx.fillStyle = reportable ? '#38bdf8' : '#f87171';
+    ctx.fillStyle = reportable ? (useLightBadge ? '#0284c7' : '#38bdf8') : (useLightBadge ? '#dc2626' : '#f87171');
     ctx.fillText(line3Text, cardX + 12, cardY + 54);
 
     if (!reportable) {
-      ctx.fillStyle = '#fca5a5';
+      ctx.fillStyle = useLightBadge ? '#b91c1c' : '#fca5a5';
       ctx.fillText(line4Text, cardX + 12, cardY + 70);
     } else if (Number.isFinite(numDolp)) {
-      ctx.fillStyle = '#4ade80';
+      ctx.fillStyle = useLightBadge ? '#15803d' : '#4ade80';
       ctx.fillText(line4Text, cardX + 12, cardY + 70);
     } else {
-      ctx.fillStyle = this.image ? '#a78bfa' : '#64748b';
+      ctx.fillStyle = this.image ? '#a78bfa' : (useLightBadge ? '#64748b' : '#64748b');
       ctx.fillText(line4Text, cardX + 12, cardY + 70);
     }
 

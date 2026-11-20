@@ -53,13 +53,18 @@ frame.addEventListener('load',async()=>{
   await new Promise(r=>setTimeout(r,300));
   const hasSampleImageAfterDemand = Boolean(w.app.overlayManager.image);
 
-  // 4. 验证单击吸附 (Click-to-Locate)
+  // 4. 验证普通单击不会误移动极坐标轴，而 Shift+单击可吸附定位 (Click-to-Locate)
   const canvas = d.getElementById('overlayCanvas');
   const rect = canvas.getBoundingClientRect();
   const clickX = rect.left + (rect.width || 800) * 0.3;
   const clickY = rect.top + (rect.height || 600) * 0.4;
   canvas.dispatchEvent(new w.MouseEvent('mousedown', { clientX: clickX, clientY: clickY, bubbles: true }));
   canvas.dispatchEvent(new w.MouseEvent('mouseup', { clientX: clickX, clientY: clickY, bubbles: true }));
+  const plainClickOffsetX = w.app.overlayManager.overlayConfig.offsetX;
+  const plainClickOffsetY = w.app.overlayManager.overlayConfig.offsetY;
+
+  canvas.dispatchEvent(new w.MouseEvent('mousedown', { clientX: clickX, clientY: clickY, shiftKey: true, bubbles: true }));
+  canvas.dispatchEvent(new w.MouseEvent('mouseup', { clientX: clickX, clientY: clickY, shiftKey: true, bubbles: true }));
   const clickedOffsetX = w.app.overlayManager.overlayConfig.offsetX;
   const clickedOffsetY = w.app.overlayManager.overlayConfig.offsetY;
 
@@ -216,6 +221,37 @@ frame.addEventListener('load',async()=>{
   const sliderValAfterReset = Number(quickSlider.value);
   const inputValAfterReset = Number(quickInput.value);
 
+  // 12.5 验证精密步进 (0.5° / 0.1°)、精调面板、特征角、正交 +90°、撤销与键盘 [ / ] / 0 快捷键
+  const stepSelect = d.getElementById('overlayRotStepSelect');
+  stepSelect.value = '0.5';
+  stepSelect.dispatchEvent(new Event('change', { bubbles: true }));
+  d.getElementById('btnOverlayRotStepInc').click();
+  const rotAfterHalfStep = w.app.overlayManager.overlayConfig.rotation;
+  const labelAfterHalfStep = d.getElementById('overlayQuickRotLabel').textContent;
+
+  stepSelect.value = '0.1';
+  stepSelect.dispatchEvent(new Event('change', { bubbles: true }));
+  d.getElementById('btnOverlayRotStepInc').click();
+  const rotAfterTenthStep = w.app.overlayManager.overlayConfig.rotation;
+
+  d.getElementById('btnOverlayRotMore').click();
+  const rotPopoverVisible = getComputedStyle(d.getElementById('overlayRotPopover')).display !== 'none';
+  d.querySelector('#overlayRotPopover [data-rot-preset="45"]').click();
+  const rotAfterPreset45 = w.app.overlayManager.overlayConfig.rotation;
+  d.getElementById('btnOverlayRotOrtho').click();
+  const rotAfterOrtho = w.app.overlayManager.overlayConfig.rotation;
+  d.getElementById('btnOverlayRotUndo').click();
+  const rotAfterUndo = w.app.overlayManager.overlayConfig.rotation;
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  const rotPopoverClosedByEscape = getComputedStyle(d.getElementById('overlayRotPopover')).display === 'none';
+
+  stepSelect.value = '1';
+  stepSelect.dispatchEvent(new Event('change', { bubbles: true }));
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: ']', bubbles: true }));
+  const rotAfterBracketKey = w.app.overlayManager.overlayConfig.rotation;
+  w.dispatchEvent(new w.KeyboardEvent('keydown', { key: '0', bubbles: true }));
+  const rotAfterZeroKey = w.app.overlayManager.overlayConfig.rotation;
+
   // 13. 验证画布键盘操作、语义状态与 Escape 收起/退出
   const canvasTabIndex = canvas.getAttribute('tabindex');
   const canvasRole = canvas.getAttribute('role');
@@ -241,6 +277,67 @@ frame.addEventListener('load',async()=>{
   const topLeftPressed = d.querySelector('.hud-dock-btn[data-corner="top-left"]').getAttribute('aria-pressed');
   const grayPressed = d.getElementById('btnHudFilterGray').getAttribute('aria-pressed');
 
+  // 13. 验证剪贴板粘贴添加光学图片与文本输入区防误触
+  let pasteTestError = null;
+  let viewAfterTextInputPaste = null;
+  let hasImageAfterTextInputPaste = null;
+  let viewAfterImagePaste = null;
+  let hasImageAfterPaste = null;
+  let pastedImageName = '';
+  let pastedResolution = '';
+  let viewAfterHtmlPaste = null;
+  let hasImageAfterHtmlPaste = null;
+  try {
+    w.app.overlayManager.clearImage();
+    w.app.switchToView('polar');
+    await new Promise(r=>setTimeout(r,150));
+
+    const pasteCanvas = d.createElement('canvas');
+    pasteCanvas.width = 64; pasteCanvas.height = 48;
+    const pctx = pasteCanvas.getContext('2d');
+    pctx.fillStyle = '#38bdf8'; pctx.fillRect(0,0,64,48);
+    const pasteBlob = await new Promise(res => pasteCanvas.toBlob(res, 'image/png'));
+    const pasteImgFile = new w.File([pasteBlob], 'image.png', { type: 'image/png' });
+
+    // 13a. 焦点在文本输入框且同时有纯文本时，不劫持文本粘贴
+    const textPasteDt = new w.DataTransfer();
+    textPasteDt.setData('text/plain', '0 100');
+    textPasteDt.items.add(pasteImgFile);
+    input.focus();
+    const textEvt = new w.ClipboardEvent('paste', { clipboardData: textPasteDt, bubbles: true, cancelable: true });
+    input.dispatchEvent(textEvt);
+    await new Promise(r=>setTimeout(r,150));
+    viewAfterTextInputPaste = w.app.activeView;
+    hasImageAfterTextInputPaste = Boolean(w.app.overlayManager.image);
+
+    // 13b. 非文本输入区粘贴纯图片，自动导入并切换至叠加视图
+    d.activeElement?.blur?.();
+    const imgPasteDt = new w.DataTransfer();
+    imgPasteDt.items.add(pasteImgFile);
+    const imgEvt = new w.ClipboardEvent('paste', { clipboardData: imgPasteDt, bubbles: true, cancelable: true });
+    d.dispatchEvent(imgEvt);
+    await new Promise(r=>setTimeout(r,400));
+    viewAfterImagePaste = w.app.activeView;
+    hasImageAfterPaste = Boolean(w.app.overlayManager.image);
+    pastedImageName = w.app.overlayManager.imageName || '';
+    pastedResolution = d.getElementById('step1OptResolution').textContent;
+
+    // 13c. 粘贴包含 data:image/png 的 HTML 富文本片段（如网页/文档复制图片）
+    w.app.overlayManager.clearImage();
+    w.app.switchToView('polar');
+    await new Promise(r=>setTimeout(r,80));
+    const htmlDataUrl = pasteCanvas.toDataURL('image/png');
+    const htmlPasteDt = new w.DataTransfer();
+    htmlPasteDt.setData('text/html', '<img src="' + htmlDataUrl + '" alt="copied">');
+    const htmlEvt = new w.ClipboardEvent('paste', { clipboardData: htmlPasteDt, bubbles: true, cancelable: true });
+    d.dispatchEvent(htmlEvt);
+    await new Promise(r=>setTimeout(r,300));
+    viewAfterHtmlPaste = w.app.activeView;
+    hasImageAfterHtmlPaste = Boolean(w.app.overlayManager.image);
+  } catch (err) {
+    pasteTestError = String(err && err.stack ? err.stack : err);
+  }
+
   document.getElementById('result').textContent=JSON.stringify({
     activeView,
     overlayVisible,
@@ -250,6 +347,8 @@ frame.addEventListener('load',async()=>{
     presetRot,
     isDynamicRange,
     sampleName,
+    plainClickOffsetX,
+    plainClickOffsetY,
     clickedOffsetX,
     clickedOffsetY,
     currentRotation,
@@ -308,6 +407,16 @@ frame.addEventListener('load',async()=>{
     rotAfterReset,
     sliderValAfterReset,
     inputValAfterReset,
+    rotAfterHalfStep,
+    labelAfterHalfStep,
+    rotAfterTenthStep,
+    rotPopoverVisible,
+    rotAfterPreset45,
+    rotAfterOrtho,
+    rotAfterUndo,
+    rotPopoverClosedByEscape,
+    rotAfterBracketKey,
+    rotAfterZeroKey,
     canvasTabIndex,
     canvasRole,
     offsetBeforeKeyboard,
@@ -320,7 +429,16 @@ frame.addEventListener('load',async()=>{
     fullscreenPressedAfterEscape,
     emeraldPressed,
     topLeftPressed,
-    grayPressed
+    grayPressed,
+    pasteTestError,
+    viewAfterTextInputPaste,
+    hasImageAfterTextInputPaste,
+    viewAfterImagePaste,
+    hasImageAfterPaste,
+    pastedImageName,
+    pastedResolution,
+    viewAfterHtmlPaste,
+    hasImageAfterHtmlPaste
   });
 });
 </script>`;
@@ -344,7 +462,7 @@ try {
   const chrome = spawn(candidate, [
     '--headless=new', '--disable-gpu', '--disable-software-rasterizer',
     '--disable-extensions', '--no-first-run', '--dump-dom',
-    '--virtual-time-budget=5000', `http://127.0.0.1:${port}/__overlay_test__.html`
+    '--virtual-time-budget=8000', `http://127.0.0.1:${port}/__overlay_test__.html`
   ]);
   let stdout = '';
   let stderr = '';
@@ -364,6 +482,8 @@ try {
   assert.equal(res.presetRot, 36);
   assert.equal(res.isDynamicRange, true);
   assert.ok(res.sampleName.includes('ReS₂'));
+  assert.equal(res.plainClickOffsetX, 0);
+  assert.equal(res.plainClickOffsetY, 0);
   assert.notEqual(res.clickedOffsetX, 0);
   assert.notEqual(res.clickedOffsetY, 0);
   assert.equal(res.currentRotation, 45);
@@ -435,6 +555,16 @@ try {
   assert.equal(res.rotAfterReset, 0);
   assert.equal(res.sliderValAfterReset, 0);
   assert.equal(res.inputValAfterReset, 0);
+  assert.equal(res.rotAfterHalfStep, 0.5);
+  assert.equal(res.labelAfterHalfStep, '0.5°');
+  assert.equal(res.rotAfterTenthStep, 0.6);
+  assert.equal(res.rotPopoverVisible, true);
+  assert.equal(res.rotAfterPreset45, 45);
+  assert.equal(res.rotAfterOrtho, 135);
+  assert.equal(res.rotAfterUndo, 45);
+  assert.equal(res.rotPopoverClosedByEscape, true);
+  assert.equal(res.rotAfterBracketKey, 46);
+  assert.equal(res.rotAfterZeroKey, 0);
 
   // 断言画布键盘可达性、窄屏语义状态与 Escape 行为
   assert.equal(res.canvasTabIndex, '0');
@@ -448,6 +578,17 @@ try {
   assert.equal(res.emeraldPressed, 'true');
   assert.equal(res.topLeftPressed, 'true');
   assert.equal(res.grayPressed, 'true');
+
+  // 断言剪贴板粘贴添加光学图片与文本输入区防误触
+  assert.equal(res.pasteTestError, null);
+  assert.equal(res.viewAfterTextInputPaste, 'polar');
+  assert.equal(res.hasImageAfterTextInputPaste, false);
+  assert.equal(res.viewAfterImagePaste, 'overlay');
+  assert.equal(res.hasImageAfterPaste, true);
+  assert.ok(res.pastedImageName.startsWith('pasted_optical_'));
+  assert.equal(res.pastedResolution, '64 × 48 px');
+  assert.equal(res.viewAfterHtmlPaste, 'overlay');
+  assert.equal(res.hasImageAfterHtmlPaste, true);
 
   console.log('PASS overlay smoke: preset linkage, upload flow, 4K export, rotation sync, mirror controls, responsive HUD bounds, ARIA state, keyboard canvas controls, and Escape behavior');
 } finally {

@@ -42,6 +42,7 @@
     <symbol id="i-flip-x" viewBox="0 0 24 24"><path d="M12 3v18M7 7l-5 5 5 5V7zM17 7l5 5-5 5V7z"/></symbol>
     <symbol id="i-flip-y" viewBox="0 0 24 24"><path d="M3 12h18M7 7l5-5 5 5H7zM7 17l5 5 5-5H7z"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v11M8 10l4 4 4-4M4 16.5v3h16v-3"/></symbol>
+    <symbol id="i-paste" viewBox="0 0 24 24"><rect x="6" y="5" width="12" height="16" rx="2"/><path d="M9 5V3.5h6V5"/><path d="M9.5 11.5h5M9.5 15h3.5"/></symbol>
   </svg>
   <div class="app-container">
     <!-- 顶部导航栏 -->
@@ -133,9 +134,9 @@
                 <span id="step1OptStatusBadge" class="badge badge-secondary">待导入光学底图 · 极坐标已就绪</span>
               </div>
               <div class="form-group">
-                <div id="step1OptUploadZone" class="drop-zone" role="button" tabindex="0" aria-label="选择或拖入样品显微光学照片" style="padding:0.75rem 0.5rem;font-size:0.75rem;">
+                <div id="step1OptUploadZone" class="drop-zone" role="button" tabindex="0" aria-label="选择、拖入或粘贴样品显微光学照片" style="padding:0.75rem 0.5rem;font-size:0.75rem;">
                   <svg class="drop-zone-icon" style="width:20px;height:20px;"><use href="#i-image"/></svg>
-                  <span>点击或拖入样品光学显微照片 (.png, .jpg)</span>
+                  <span>点击、拖入或 Ctrl+V 粘贴样品光学显微照片 (.png, .jpg)</span>
                   <input type="file" id="step1OptFileInput" accept="image/*" style="display:none;">
                 </div>
 
@@ -151,17 +152,20 @@
                       <button id="btnStep1ViewOverlay" class="btn btn-primary btn-xs" type="button" title="直接切换至主舞台叠加视图并对准微区">
                         <svg class="ui-icon" style="width:12px;height:12px;"><use href="#i-overlay"/></svg>在主视图中查看
                       </button>
-                      <button id="btnStep1ReplaceImg" class="btn btn-secondary btn-xs" type="button" title="更换当前光学照片">更换</button>
+                      <button id="btnStep1ReplaceImg" class="btn btn-secondary btn-xs" type="button" title="点击选择新图片，或直接按 Ctrl+V 粘贴替换">更换</button>
                     </div>
                   </div>
                 </div>
               </div>
-              <div style="display:flex;gap:0.4rem;margin-top:0.35rem;">
+              <div style="display:flex;gap:0.4rem;margin-top:0.35rem;flex-wrap:wrap;">
+                <button id="btnStep1PasteImg" class="btn btn-secondary btn-sm" type="button" title="从剪贴板粘贴样品光学照片 (支持 Ctrl+V / Cmd+V)">
+                  <svg class="ui-icon"><use href="#i-paste"/></svg>粘贴图片
+                </button>
                 <button id="btnStep1LoadPresetImg" class="btn btn-secondary btn-sm" type="button" style="flex:1;" title="载入当前选定预设的显微镜光学照片套件">载入预设样品图</button>
                 <button id="btnStep1ClearImg" class="btn btn-secondary btn-sm" type="button" title="清除当前底图">清除底图</button>
               </div>
               <div class="field-help" style="margin-top:0.35rem;">
-                导入显微照片将自动切换至「光学图像叠加」主视图；可在样品照片上单击激光斑吸附对准。
+                导入、拖入或 Ctrl+V 粘贴显微照片将自动切换至「光学图像叠加」主视图；可在样品照片上单击激光斑吸附对准。
               </div>
             </div>
 
@@ -568,7 +572,7 @@
                   <span id="overlayRotationVal" class="slider-val">0°</span>
                 </label>
                 <div class="slider-container">
-                  <input type="range" id="overlayRotation" class="range-slider" min="-180" max="180" step="1" value="0">
+                  <input type="range" id="overlayRotation" class="range-slider" min="-180" max="180" step="0.5" value="0">
                 </div>
               </div>
               <div class="form-group">
@@ -801,6 +805,9 @@
                   <svg class="ui-icon"><use href="#i-import"/></svg>导入光学图
                 </label>
                 <input type="file" id="overlayImageInput" accept="image/*" style="display:none;">
+                <button id="btnOverlayPasteImg" class="btn btn-secondary btn-sm" type="button" title="从剪贴板粘贴样品光学照片 (支持 Ctrl+V / Cmd+V)">
+                  <svg class="ui-icon"><use href="#i-paste"/></svg>粘贴光学图
+                </button>
                 <button id="btnOverlaySampleImg" class="btn btn-secondary btn-sm" type="button" title="载入当前选定预设对应的样品显微光学照片套件">预设联动图</button>
                 <button id="btnOverlayClearImg" class="btn btn-secondary btn-sm" type="button" title="清除当前底图">清除底图</button>
                 <button id="btnOverlayResetPos" class="btn btn-secondary btn-sm" type="button" title="将极坐标图精准对准到样品晶片/激光斑中心 (快捷键 R)">
@@ -814,29 +821,51 @@
                 </button>
               </div>
 
-              <!-- 快捷旋转对齐晶棱控制器 (支持滑移拖拽、直接输入角度与步进微调) -->
-              <div class="overlay-bar-group overlay-rot-group" title="快捷微调极坐标旋转角 (支持滑移拖拽、直接输入角度、按钮微调或 Shift+滚轮 / Alt+拖拽)">
-                <span id="overlayRotationLabel" class="overlay-group-label"><svg class="ui-icon"><use href="#i-rotate"/></svg>对齐偏角:</span>
-                
-                <!-- 1. 滑移模块 (Range Slider) -->
-                <div class="overlay-rot-slider-wrap">
-                  <input type="range" id="overlayQuickRotSlider" class="overlay-rot-slider" min="-180" max="180" step="1" value="0" aria-labelledby="overlayRotationLabel" title="拖动滑移对齐偏角 (-180° ~ 180°)">
+              <!-- 快捷旋转对齐晶棱控制器 (支持一步步精确微调、长按连发、滑移拖拽、滚轮/键盘精调与快捷对齐) -->
+              <div class="overlay-bar-group overlay-rot-group" title="对齐偏角精密调谐：支持逐步微调、长按连续步进、滑块拖拽(双击归零)、输入框滚轮/↑↓精调，以及 [ / ] 键或 Shift+滚轮 / Alt+拖拽">
+                <span id="overlayRotationLabel" class="overlay-group-label"><svg class="ui-icon"><use href="#i-rotate"/></svg>对齐偏角</span>
+
+                <!-- 1. 滑移模块 (Range Slider + 0° 中心基准刻度，双击归零) -->
+                <div class="overlay-rot-slider-wrap" title="拖动滑移对齐偏角 (-180° ~ 180°，双击归零 0°)">
+                  <span class="overlay-rot-zero-tick" aria-hidden="true"></span>
+                  <input type="range" id="overlayQuickRotSlider" class="overlay-rot-slider" min="-180" max="180" step="1" value="0" aria-labelledby="overlayRotationLabel" title="拖动滑移对齐偏角 (-180° ~ 180°，双击归零)">
                 </div>
 
-                <!-- 2. 输入角度模块 (Number Input) -->
-                <div class="overlay-rot-input-wrap">
-                  <input type="number" id="overlayQuickRotInput" class="overlay-rot-number-input" min="-180" max="180" step="1" value="0" inputmode="numeric" aria-labelledby="overlayRotationLabel" title="直接输入对齐偏角 (-180° ~ 180°，按回车生效)">
-                  <span class="overlay-rot-unit">°</span>
+                <!-- 2. 一步步微调 + 直接输入角度模块 (支持 0.1° 亚度精调、长按连发与滚轮微调) -->
+                <div class="overlay-rot-fine-box" id="overlayRotFineBox">
+                  <button id="btnOverlayRotStepDec" class="rot-fine-btn" type="button" aria-label="按当前步长逆时针微调一步" title="按当前步长逆时针微调一步 (支持长按连续调整，快捷键 [ )">−</button>
+                  <div class="overlay-rot-input-wrap">
+                    <input type="number" id="overlayQuickRotInput" class="overlay-rot-number-input" min="-180" max="180" step="0.1" value="0" inputmode="decimal" aria-labelledby="overlayRotationLabel" title="直接输入对齐偏角 (-180° ~ 180°，支持 0.1° 精度、滚轮微调、↑↓ 键逐步调整)">
+                    <span class="overlay-rot-unit">°</span>
+                  </div>
+                  <button id="btnOverlayRotStepInc" class="rot-fine-btn" type="button" aria-label="按当前步长顺时针微调一步" title="按当前步长顺时针微调一步 (支持长按连续调整，快捷键 ] )">+</button>
                 </div>
 
-                <!-- 3. 微调步进集群 -->
+                <!-- 3. 步长档位切换 (选择一步调整的精度) -->
+                <div class="overlay-rot-step-wrap" title="选择每一步调整的角度精度 (同时作用于 −/+ 按钮、[ / ] 键、输入框滚轮与 Shift+滚轮)">
+                  <span class="overlay-rot-step-prefix">步长</span>
+                  <select id="overlayRotStepSelect" class="overlay-rot-step-select" aria-label="角度步进精度">
+                    <option value="0.1">0.1°</option>
+                    <option value="0.5">0.5°</option>
+                    <option value="1" selected>1°</option>
+                    <option value="5">5°</option>
+                    <option value="15">15°</option>
+                  </select>
+                </div>
+
+                <!-- 4. 快捷微调步进集群 (支持长按连续步进) -->
                 <div class="overlay-stepper-cluster">
-                  <button id="btnOverlayRotM5" class="stepper-btn" type="button" title="逆时针旋转 5°">-5°</button>
-                  <button id="btnOverlayRotM1" class="stepper-btn" type="button" title="逆时针微调 1°">-1°</button>
-                  <button id="btnOverlayRotReset" class="stepper-display" type="button" aria-label="将对齐偏角重置为 0 度" title="点击重置旋转角为 0°"><span id="overlayQuickRotLabel">0°</span></button>
-                  <button id="btnOverlayRotP1" class="stepper-btn" type="button" title="顺时针微调 1°">+1°</button>
-                  <button id="btnOverlayRotP5" class="stepper-btn" type="button" title="顺时针旋转 5°">+5°</button>
+                  <button id="btnOverlayRotM5" class="stepper-btn" type="button" title="逆时针旋转 5° (支持长按)">-5°</button>
+                  <button id="btnOverlayRotM1" class="stepper-btn" type="button" title="逆时针微调 1° (支持长按)">-1°</button>
+                  <button id="btnOverlayRotReset" class="stepper-display" type="button" aria-label="将对齐偏角重置为 0 度" title="点击归零 0° (快捷键 0)"><span id="overlayQuickRotLabel">0°</span></button>
+                  <button id="btnOverlayRotP1" class="stepper-btn" type="button" title="顺时针微调 1° (支持长按)">+1°</button>
+                  <button id="btnOverlayRotP5" class="stepper-btn" type="button" title="顺时针旋转 5° (支持长按)">+5°</button>
                 </div>
+
+                <!-- 5. 高级角度对齐助手触发器 -->
+                <button id="btnOverlayRotMore" class="btn btn-secondary btn-sm overlay-rot-more-btn" type="button" aria-expanded="false" aria-controls="overlayRotPopover" title="展开角度快捷预设、主轴对齐、角度吸附与撤销">
+                  <span>精调</span><span class="rot-more-caret" aria-hidden="true">▾</span>
+                </button>
               </div>
 
               <!-- 出版级导出与控制抽屉触发器 -->
@@ -855,7 +884,28 @@
             </div>
 
             <div class="overlay-canvas-wrapper">
-              <canvas id="overlayCanvas" tabindex="0" role="application" aria-label="样品叠加交互画布。方向键移动极坐标图，Shift 加方向键快速移动，加号或减号缩放，R 键复位，F 键切换全屏。"></canvas>
+              <canvas id="overlayCanvas" tabindex="0" role="application" aria-label="样品叠加交互画布。支持 Ctrl+V 粘贴光学底图，方向键移动极坐标图，Shift 加方向键快速移动，加号或减号缩放，R 键复位，F 键切换全屏。"></canvas>
+
+              <!-- 无数据且无底图时的交互式光学工作台引导卡片 -->
+              <div id="overlayEmptyPrompt" class="overlay-empty-prompt">
+                <div class="overlay-empty-card">
+                  <svg class="overlay-empty-icon"><use href="#i-image"/></svg>
+                  <div class="overlay-empty-title">粘贴、拖入或导入样品光学显微图</div>
+                  <div class="overlay-empty-desc">
+                    直接按 <kbd class="overlay-shortcut-kbd">Ctrl+V</kbd> / <kbd class="overlay-shortcut-kbd">Cmd+V</kbd> 粘贴截图或复制的图片，或将图像拖入画布。<br>
+                    可在导入偏振数据前先预览、镜像、调节亮度并对齐光学底图。
+                  </div>
+                  <div class="overlay-empty-actions">
+                    <button id="btnEmptyOverlayPaste" class="btn btn-primary btn-sm" type="button">
+                      <svg class="ui-icon"><use href="#i-paste"/></svg>粘贴光学图
+                    </button>
+                    <label for="overlayImageInput" class="btn btn-secondary btn-sm" style="margin:0;">
+                      <svg class="ui-icon"><use href="#i-import"/></svg>选择图片文件
+                    </label>
+                    <button id="btnEmptyOverlaySample" class="btn btn-secondary btn-sm" type="button">载入预设底图</button>
+                  </div>
+                </div>
+              </div>
 
               <!-- 右侧浮层微调控制抽屉 (Quick HUD Drawer) -->
               <div id="overlayQuickHud" class="overlay-quick-hud" role="region" aria-label="极坐标叠加微调" aria-hidden="true" tabindex="-1" style="display:none;">
@@ -941,11 +991,60 @@
                 </div>
               </div>
 
+              <!-- 角度精密调谐弹出面板 (Rotation Fine-Tuning Popover) -->
+              <div id="overlayRotPopover" class="overlay-rot-popover" role="dialog" aria-label="角度精密调谐与快捷对齐" aria-hidden="true" style="display:none;">
+                <div class="rot-popover-header">
+                  <span class="rot-popover-title"><svg class="ui-icon"><use href="#i-rotate"/></svg>角度精密调谐助手</span>
+                  <button id="btnCloseRotPopover" class="hud-close-btn" type="button" aria-label="关闭角度调谐助手" title="关闭">×</button>
+                </div>
+                <div class="rot-popover-body">
+                  <div class="rot-popover-section">
+                    <div class="rot-popover-label">单步微调精度 (一步步调整)</div>
+                    <div class="rot-pill-row" id="rotStepPillRow">
+                      <button class="rot-pill-btn" type="button" data-rot-step="0.1">0.1°</button>
+                      <button class="rot-pill-btn" type="button" data-rot-step="0.5">0.5°</button>
+                      <button class="rot-pill-btn active" type="button" data-rot-step="1">1°</button>
+                      <button class="rot-pill-btn" type="button" data-rot-step="5">5°</button>
+                      <button class="rot-pill-btn" type="button" data-rot-step="15">15°</button>
+                    </div>
+                  </div>
+                  <div class="rot-popover-section">
+                    <div class="rot-popover-label">常用特征角一键直达</div>
+                    <div class="rot-pill-row">
+                      <button class="rot-pill-btn" type="button" data-rot-preset="-90">-90°</button>
+                      <button class="rot-pill-btn" type="button" data-rot-preset="-45">-45°</button>
+                      <button class="rot-pill-btn" type="button" data-rot-preset="0">0°</button>
+                      <button class="rot-pill-btn" type="button" data-rot-preset="45">+45°</button>
+                      <button class="rot-pill-btn" type="button" data-rot-preset="90">+90°</button>
+                      <button class="rot-pill-btn" type="button" data-rot-preset="180">180°</button>
+                    </div>
+                  </div>
+                  <div class="rot-popover-section">
+                    <div class="rot-popover-label">科研快捷对齐与辅助</div>
+                    <div class="rot-action-grid">
+                      <button id="btnOverlayRotAlignFast" class="rot-action-btn" type="button" title="将偏角一键对齐到当前拟合主轴 θmax">对齐主轴 θmax</button>
+                      <button id="btnOverlayRotOrtho" class="rot-action-btn" type="button" title="顺时针正交旋转 90° (快轴/慢轴切换)">正交 +90°</button>
+                      <button id="btnOverlayRotUndo" class="rot-action-btn" type="button" title="撤销上一步角度调整 (Ctrl+Z)">撤销上一步</button>
+                      <label class="rot-snap-toggle" title="开启后拖动滑块或 Alt+拖拽自动吸附至 15° 整数倍">
+                        <input type="checkbox" id="chkOverlayRotSnap">
+                        <span>15° 刻度吸附</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div class="rot-popover-tips">
+                    <span>快捷键：</span><kbd>[</kbd> / <kbd>]</kbd> 逐步微调 · <kbd>Shift</kbd> 5×步长 · <kbd>Alt</kbd> 0.1°精调 · <kbd>0</kbd> 归零 · <kbd>Ctrl+Z</kbd> 撤销
+                  </div>
+                </div>
+              </div>
+
+              <!-- 实时角度/缩放微调 HUD 浮标 -->
+              <div id="overlayLiveHudPill" class="overlay-live-hud-pill" role="status" aria-live="polite" style="display:none;"></div>
+
               <div id="overlayToast" class="overlay-toast" role="status" aria-live="polite" style="display:none;">
                 <span id="overlayToastText">已切换到样品叠加视图</span>
               </div>
               <div id="overlayDragHint" class="overlay-drag-hint">
-                <span>🎯 单击吸附中心 · 左键拖拽平移 · 滚轮缩放 · Shift+滚轮旋转 · X/Y 轴镜像 · F 全屏</span>
+                <span>🎯 拖拽极坐标平移 · Shift+单击吸附中心 · 滚轮缩放 · [ / ] 逐步旋转 · 0 归零 · Alt+拖拽旋转 · X/Y 镜像 · F 全屏</span>
                 <button id="btnDismissOverlayHint" class="hint-close-btn" type="button" title="忽略提示">×</button>
               </div>
             </div>
